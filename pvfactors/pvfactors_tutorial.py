@@ -2,6 +2,9 @@
 """
 Created on Mon Mar 20 16:41:09 2023
 
+Tutorial of pvfactors which can be found on the following web site
+https://sunpower.github.io/pvfactors/tutorials
+
 @author: Jesus
 """
 
@@ -141,10 +144,10 @@ pvarray_parameters = {
     }
 
 # Discretization scheme
-discretization = {
+discretization = {'cut': {
     0: {'back': 5},  # discretize the back side of the leftmost PV row into 5 segments
     1: {'front': 3}  # discretize the front side of the center PV row into 3 segments
-    }
+    }}
 pvarray_parameters.update(discretization)
 
 # Create the PV array
@@ -153,10 +156,10 @@ pvarray = OrderedPVArray.fit_from_dict_of_scalars(pvarray_parameters)
 
 # Plot
 f, ax = plt.subplots(figsize = (10, 3))
-pvarray.plot_at_idx(0, ax)
+pvarray.plot_at_idx(0, ax, with_surface_index=True)
 plt.show()
 
-
+# Print segments on each row
 pvrow_left = pvarray.ts_pvrows[0]
 n_segments = len(pvrow_left.back.list_segments)
 print("Back side of leftmost PV row has {} segments".format(n_segments))
@@ -164,3 +167,35 @@ print("Back side of leftmost PV row has {} segments".format(n_segments))
 pvrow_center = pvarray.ts_pvrows[1]
 n_segments = len(pvrow_center.front.list_segments)
 print("Front side of center PV row has {} segments".format(n_segments))
+
+#%% Calculate view factors
+
+import matplotlib.pyplot as plt
+
+# PV array parameters
+pvarray_parameters = {
+    'n_pvrows': 2,            # number of pv rows
+    'pvrow_height': 1,        # height of pvrows (measured at center / torque tube)
+    'pvrow_width': 1,         # width of pvrows
+    'axis_azimuth': 0.,       # azimuth angle of rotation axis
+    'surface_tilt': 20.,      # tilt of the pv rows
+    'surface_azimuth': 90.,   # azimuth of the pv rows front surface
+    'solar_zenith': 40.,      # solar zenith angle
+    'solar_azimuth': 150.,    # solar azimuth angle
+    'gcr': 0.5,               # ground coverage ratio
+    }
+
+# PV array
+from pvfactors.geometry import OrderedPVArray
+pvarray = OrderedPVArray.fit_from_dict_of_scalars(pvarray_parameters)
+
+# Plot PV array
+f, ax = plt.subplots(figsize = (10, 3))
+pvarray.plot_at_idx(0, ax, with_surface_index=True)
+plt.show()
+
+# View factor matrix
+from pvfactors.viewfactors import VFCalculator
+vf_calculator = VFCalculator()
+
+vf_matrix = vf_calculator.build_ts_vf_matrix(pvarray)
