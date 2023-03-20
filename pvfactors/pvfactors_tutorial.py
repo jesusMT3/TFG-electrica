@@ -199,3 +199,26 @@ from pvfactors.viewfactors import VFCalculator
 vf_calculator = VFCalculator()
 
 vf_matrix = vf_calculator.build_ts_vf_matrix(pvarray)
+
+#%% Run full timeseries simulations
+
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+from datetime import datetime
+import pandas as pd
+import pvlib, pathlib
+    
+#tmy data
+DATA_DIR = pathlib.Path(pvlib.__file__).parent / 'data'
+df_tmy, meta_dict = pvlib.iotools.read_tmy3(DATA_DIR / '723170TYA.CSV', coerce_year= 1990)
+
+df_inputs = df_tmy.iloc[:24, :]
+
+# Plot the data
+f, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(12, 3))
+df_inputs[['DNI', 'DHI']].plot(ax=ax1)
+# df_inputs[['solar_zenith', 'solar_azimuth']].plot(ax=ax2)
+# df_inputs[['surface_tilt', 'surface_azimuth']].plot(ax=ax3)
+plt.tight_layout()
+plt.show()
