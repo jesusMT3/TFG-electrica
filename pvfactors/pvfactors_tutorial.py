@@ -202,23 +202,94 @@ vf_matrix = vf_calculator.build_ts_vf_matrix(pvarray)
 
 #%% Run full timeseries simulations
 
-import os
-import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 import pandas as pd
 import pvlib, pathlib
     
 #tmy data
-DATA_DIR = pathlib.Path(pvlib.__file__).parent / 'data'
-df_tmy, meta_dict = pvlib.iotools.read_tmy3(DATA_DIR / '723170TYA.CSV', coerce_year= 1990)
+DATA_DIR = pathlib.Path(pvlib.__file__).parent/'data'
+df_tmy, metadata = pvlib.iotools.read_tmy3(DATA_DIR/'723170TYA.CSV', coerce_year=1990)
 
-df_inputs = df_tmy.iloc[:24, :]
+#location object to this TMY
+location = pvlib.location.Location(latitude = metadata['latitude'], longitude = metadata['longitude'])
+
+# Note: TMY datasets are right-labeled hourly intervals, e.g. the
+# 10AM to 11AM interval is labeled 11.  We should calculate solar position in
+# the middle of the interval (10:30), so we subtract 30 minutes:
+
+times = df_tmy.index - pd.Timedelta('30min')
+solar_position = location.get_solarposition(times)
+#shift the index back to TMY data
+solar_position.index += pd.Timedelta('30min')
+#apparent zenith includes effect of atmospheric refraction
+
+#POA for a tracking system
+tracker_data = pvlib.tracking.singleaxis(apparent_zenith = solar_position['apparent_zenith'], 
+                                         apparent_azimuth = solar_position['azimuth'], 
+                                         axis_azimuth = 180)
+
+df = pd.DataFrame({
+    'dni': df_tmy['DNI'],
+    'dhi': df_tmy['DHI'],
+    'solar_zenith': solar_position['apparent_zenith'],
+    'solar_azimuth': solar_position['azimuth'],
+    'surface_tilt': tracker_data['surface_tilt'],
+    'surface_azimuth': tracker_data['surface_azimuth']})
+
+df_inputs = df.loc['1990-07-13']
 
 # Plot the data
 f, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(12, 3))
-df_inputs[['DNI', 'DHI']].plot(ax=ax1)
-# df_inputs[['solar_zenith', 'solar_azimuth']].plot(ax=ax2)
-# df_inputs[['surface_tilt', 'surface_azimuth']].plot(ax=ax3)
+df_inputs[['dni', 'dhi']].plot(ax=ax1)
+df_inputs[['solar_zenith', 'solar_azimuth']].plot(ax=ax2)
+df_inputs[['surface_tilt', 'surface_azimuth']].plot(ax=ax3)
+plt.tight_layout()
+plt.show()
+
+# Fixed albedo
+albedo = 0.2
+
+# PVarray paramneters
+from pvfactors.engine import PVEngine
+from pvfactors.geometry import OrderedPVArray
+pvarray_parameters = {
+    'n_pvrows': 3,            # number of pv rows
+    'pvrow_height': 1,        # height of pvrows (measured at center / torque tube)
+    'pvrow_width': 1,         # width of pvrows
+    'axis_azimuth': 0.,       # azimuth angle of rotation axis
+    'gcr': 0.4,               # ground coverage ratio
+    'rho_front_pvrow': 0.01,  # pv row front surface reflectivity
+    'rho_back_pvrow': 0.03,   # pv row back surface reflectivity
+}
+
+# Simulation for a single timestep
+pvarray = OrderedPVArray.init_from_dict(pvarray_parameters)
+
+engine = PVEngine(pvarray)
+
+engine.fit(df_inputs.index, df_inputs.dni, df_inputs.dhi,
+           df_inputs.solar_zenith, df_inputs.solar_azimuth,
+           df_inputs.surface_tilt, df_inputs.surface_azimuth,
+           albedo)
+
+# Get PV array
+pvarray = engine.run_full_mode(fn_build_report = lambda pvarray: pvarray)
+
+# Plot pvarray shapely geometries
+f, ax = plt.subplots(figsize=(10, 3))
+pvarray.plot_at_idx(15, ax, with_surface_index=True)
+ax.set_title(df_inputs.index[15])
+plt.show()
+
+# Run multiple timesteps
+from pvfactors.report import example_fn_build_report
+
+report = engine.run_full_mode(fn_build_report = example_fn_build_report)
+df_report = pd.DataFrame(report, index = df_inputs.index)
+
+f, ax = plt.subplots(1, 2, figsize=(10, 3))
+df_report[['qinc_front', 'qinc_back']].plot(ax=ax[0])
+df_report[['iso_front', 'iso_back']].plot(ax=ax[1])
 plt.tight_layout()
 plt.show()
