@@ -293,3 +293,184 @@ df_report[['qinc_front', 'qinc_back']].plot(ax=ax[0])
 df_report[['iso_front', 'iso_back']].plot(ax=ax[1])
 plt.tight_layout()
 plt.show()
+
+#%% Full simulations in parallel
+import pvlib as pv
+import pandas as pd
+import os
+import matplotlib.pyplot as plt
+
+# TMY data
+file_path = os.path.dirname(__file__) + r'\tmy_40.453_-3.727_2005_2020.epw'
+df_tmy, metadata = pv.iotools.read_epw(file_path, coerce_year = 2020)
+
+# Weather data
+location = pv.location.Location(latitude = metadata['latitude'], longitude = metadata['longitude'])
+
+# Getting data from the middle hour (TMY is usually right-indexed)
+times = df_tmy.index - pd.Timedelta('30min')
+solar_position = location.get_solarposition(times)
+
+#shift the index back to TMY data
+solar_position.index += pd.Timedelta('30min')
+
+# Tracker data
+tracker_data = pv.tracking.singleaxis(apparent_zenith = solar_position['apparent_zenith'], 
+                                         apparent_azimuth = solar_position['azimuth'], 
+                                         axis_azimuth = 180)
+
+df = pd.DataFrame({
+    'dni': df_tmy['dni'],
+    'dhi': df_tmy['dhi'],
+    'solar_zenith': solar_position['apparent_zenith'],
+    'solar_azimuth': solar_position['azimuth'],
+    'surface_tilt': tracker_data['surface_tilt'],
+    'surface_azimuth': tracker_data['surface_azimuth']})
+
+df_day1 = df.loc['2020-07-13']
+df_day2 = df.loc['2020-07-14']
+df_inputs = pd.concat([df_day1, df_day2])
+# Plot data
+f, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize = (12, 3))
+df_inputs[['dni', 'dhi']].plot(ax = ax1)
+df_inputs[['solar_zenith', 'solar_azimuth']].plot(ax = ax2)
+df_inputs[['surface_tilt', 'surface_azimuth']].plot(ax = ax3)
+plt.tight_layout()
+plt.show()
+
+# Fixed albedo
+albedo = 0.2
+
+# Engine
+from pvfactors.report import example_fn_build_report
+from pvfactors.engine import PVEngine
+from pvfactors.geometry import OrderedPVArray
+
+# PV array data
+pvarray_parameters = {
+    'n_pvrows': 3,            # number of pv rows
+    'pvrow_height': 1,        # height of pvrows (measured at center / torque tube)
+    'pvrow_width': 1,         # width of pvrows
+    'axis_azimuth': 0.,       # azimuth angle of rotation axis
+    'gcr': 0.4,               # ground coverage ratio
+    'rho_front_pvrow': 0.01,  # pv row front surface reflectivity
+    'rho_back_pvrow': 0.03    # pv row back surface reflectivity
+}
+
+pvarray = OrderedPVArray.init_from_dict(pvarray_parameters)
+engine = PVEngine(pvarray)
+
+engine.fit(df_inputs.index, df_inputs.dni, df_inputs.dhi,
+           df_inputs.solar_zenith, df_inputs.solar_azimuth,
+           df_inputs.surface_tilt, df_inputs.surface_azimuth,
+           albedo)
+
+# Get PV array
+report = engine.run_full_mode(fn_build_report = example_fn_build_report)
+df_report = pd.DataFrame(report, index = df_inputs.index)
+# df_report = pd.DataFrame(report, index=df_inputs.index)
+
+# Plot the results
+f, ax = plt.subplots(1, 2, figsize=(10, 3))
+df_report[['qinc_front', 'qinc_back']].plot(ax=ax[0])
+df_report[['iso_front', 'iso_back']].plot(ax=ax[1])
+plt.tight_layout()
+plt.show()
+
+#%% Account for AOI reflection losses
+
+import pvlib as pv
+import pandas as pd
+import os
+import matplotlib.pyplot as plt
+
+# Helper functions for plotting and simulation
+def plot_irradiance(df_report):
+    # Plot irradiance
+    f, ax = plt.subplots(nrows=1, ncols=2, figsize=(12, 4))
+    # Plot back surface irradiance
+    df_report[['qinc_back', 'qabs_back']].plot(ax=ax[0])
+    ax[0].set_title('Back surface irradiance')
+    ax[0].set_ylabel('W/m2')
+    # Plot front surface irradiance
+    df_report[['qinc_front', 'qabs_front']].plot(ax=ax[1])
+    ax[1].set_title('Front surface irradiance')
+    ax[1].set_ylabel('W/m2')
+    plt.show()
+
+def plot_aoi_losses(df_report):
+    # plotting AOI losses
+    f, ax = plt.subplots(figsize=(5.5, 4))
+    df_report[['aoi_losses_back_%']].plot(ax=ax)
+    df_report[['aoi_losses_front_%']].plot(ax=ax)
+    # Adjust axes
+    ax.set_ylabel('%')
+    ax.legend(['AOI losses back PV row', 'AOI losses front PV row'])
+    ax.set_title('AOI losses')
+    plt.show()
+
+# Create a function that will build a simulation report
+def fn_report(pvarray):
+    # Get irradiance values
+    report = {'qinc_back': pvarray.ts_pvrows[1].back.get_param_weighted('qinc'),
+              'qabs_back': pvarray.ts_pvrows[1].back.get_param_weighted('qabs'),
+              'qinc_front': pvarray.ts_pvrows[1].front.get_param_weighted('qinc'),
+              'qabs_front': pvarray.ts_pvrows[1].front.get_param_weighted('qabs')}
+    # Calculate AOI losses
+    report['aoi_losses_back_%'] = (report['qinc_back'] - report['qabs_back']) / report['qinc_back'] * 100.
+    report['aoi_losses_front_%'] = (report['qinc_front'] - report['qabs_front']) / report['qinc_front'] * 100.
+    # Return report
+    return report
+
+# TMY data
+file_path = os.path.dirname(__file__) + r'\tmy_40.453_-3.727_2005_2020.epw'
+df_tmy, metadata = pv.iotools.read_epw(file_path, coerce_year = 2020)
+
+# Weather data
+location = pv.location.Location(latitude = metadata['latitude'], longitude = metadata['longitude'])
+
+# Getting data from the middle hour (TMY is usually right-indexed)
+times = df_tmy.index - pd.Timedelta('30min')
+solar_position = location.get_solarposition(times)
+
+#shift the index back to TMY data
+solar_position.index += pd.Timedelta('30min')
+
+# Tracker data
+tracker_data = pv.tracking.singleaxis(apparent_zenith = solar_position['apparent_zenith'], 
+                                         apparent_azimuth = solar_position['azimuth'], 
+                                         axis_azimuth = 180)
+
+df = pd.DataFrame({
+    'dni': df_tmy['dni'],
+    'dhi': df_tmy['dhi'],
+    'solar_zenith': solar_position['apparent_zenith'],
+    'solar_azimuth': solar_position['azimuth'],
+    'surface_tilt': tracker_data['surface_tilt'],
+    'surface_azimuth': tracker_data['surface_azimuth']})
+
+df_day1 = df.loc['2020-06-13']
+df_day2 = df.loc['2020-06-14']
+df_inputs = pd.concat([df_day1, df_day2])
+
+f, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(12, 3))
+df_inputs[['dni', 'dhi']].plot(ax=ax1)
+df_inputs[['solar_zenith', 'solar_azimuth']].plot(ax=ax2)
+df_inputs[['surface_tilt', 'surface_azimuth']].plot(ax=ax3)
+
+plt.tight_layout()
+plt.show()
+
+# Fixed albedo
+albedo = 0.2
+
+# PV array parameters
+pvarray_parameters = {
+    'n_pvrows': 3,            # number of pv rows
+    'pvrow_height': 1,        # height of pvrows (measured at center / torque tube)
+    'pvrow_width': 1,         # width of pvrows
+    'axis_azimuth': 0.,       # azimuth angle of rotation axis
+    'gcr': 0.4,               # ground coverage ratio
+}
+
+
