@@ -300,7 +300,7 @@ import pandas as pd
 import os
 import matplotlib.pyplot as plt
 
-# TMY data
+# EPW data
 file_path = os.path.dirname(__file__) + r'\tmy_40.453_-3.727_2005_2020.epw'
 df_tmy, metadata = pv.iotools.read_epw(file_path, coerce_year = 2020)
 
