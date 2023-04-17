@@ -35,23 +35,40 @@ modules_per_string = 10
 strings = 4
 pannel_azimuth = 30
 pannel_tilt = 30
+albedo = 0.2
+
 
 def main():
     
     # Global variables and objects
+<<<<<<< HEAD
     global site_location, orientation, irrad, system, array_monthly, array_power, cec_inverters, results
     
     # Load meteorological data
     load_data()
      
+=======
+    global site_location, orientation, irrad, system, array_monthly, array_power, cec_inverters
+    module = 'LONGi_Green_Energy_Technology_Co___Ltd__LR6_72BP_350M'
+    inverter = 'ABB__PVI_10_0_I_OUTD_x_US_480_y_z__480V_'
+    
+    # Load meteorological data
+    meteo_file = tk.filedialog.askopenfilename()
+    data, metadata = iotools.read_epw(meteo_file, coerce_year = 2020)
+    site_location = location.Location(latitude = metadata['latitude'],
+                                      longitude = metadata['longitude'])
+      
+    solar_position = site_location.get_solarposition(data.index)
+    
+>>>>>>> 92fba3471085c8f94a2c07aa68f6b4e175ebad37
     # Choose solar pannels and inverters, and the temperature models
     temp_model_parameters = PARAMS['sapm']['open_rack_glass_glass']
     cec_modules = pvsystem.retrieve_sam('CECMod')
     cec_inverters = pvsystem.retrieve_sam('cecinverter')
     
     bifacial_modules = cec_modules.T[cec_modules.T['Bifacial'] == 1].T
-    module = bifacial_modules['LONGi_Green_Energy_Technology_Co___Ltd__LR6_72BP_350M']
-    inverter = cec_inverters['ABB__PVI_10_0_I_OUTD_x_US_480_y_z__480V_']
+    module = bifacial_modules[module]
+    inverter = cec_inverters[inverter]
     
     if backtrack == True:
         sat_mount = pvsystem.SingleAxisTrackerMount(axis_tilt=axis_tilt,
@@ -103,7 +120,8 @@ def main():
     system = pvsystem.PVSystem(arrays = [array],
                                inverter_parameters = inverter,
                                modules_per_string = modules_per_string,
-                               strings_per_inverter = strings)
+                               strings_per_inverter = strings,
+                               albedo = albedo)
     
     mc_bifi = modelchain.ModelChain(system, site_location, aoi_model='no_loss')
     mc_bifi.run_model_from_effective_irradiance(irrad)
