@@ -39,16 +39,11 @@ pannel_tilt = 30
 def main():
     
     # Global variables and objects
-    global site_location, orientation, irrad, system, array_monthly, array_power, cec_inverters
+    global site_location, orientation, irrad, system, array_monthly, array_power, cec_inverters, results
     
     # Load meteorological data
-    meteo_file = tk.filedialog.askopenfilename()
-    data, metadata = iotools.read_epw(meteo_file, coerce_year = 2020)
-    site_location = location.Location(latitude = metadata['latitude'],
-                                      longitude = metadata['longitude'])
-    
-    solar_position = site_location.get_solarposition(data.index)
-    
+    load_data()
+     
     # Choose solar pannels and inverters, and the temperature models
     temp_model_parameters = PARAMS['sapm']['open_rack_glass_glass']
     cec_modules = pvsystem.retrieve_sam('CECMod')
@@ -112,15 +107,40 @@ def main():
     
     mc_bifi = modelchain.ModelChain(system, site_location, aoi_model='no_loss')
     mc_bifi.run_model_from_effective_irradiance(irrad)
+    results = pd.DataFrame(mc_bifi.results.ac)
     
     # plot results
-    array_power = pd.DataFrame(mc_bifi.results.ac)
-    array_power = array_power.clip(lower=0)
+    plot_monthly('kWh')
+    plot_daily('2020-12-21')
 
-    # Monthly energy production
-    array_monthly = array_power.resample('M').sum()
-    # Convert to MWh 
-    array_monthly /= 1000
+def load_data():
+    global data, metadata, site_location, solar_position
+    meteo_file = tk.filedialog.askopenfilename()
+    data, metadata = iotools.read_epw(meteo_file, coerce_year = 2020)
+    site_location = location.Location(latitude = metadata['latitude'],
+                                      longitude = metadata['longitude'])
+
+    solar_position = site_location.get_solarposition(data.index)
+
+def plot_monthly(units):
+    
+    df = pd.DataFrame(results)
+    
+    # Cut powers lower to zero
+    df = df.clip(lower=0)
+    
+    # Reshape with units parameter
+    if units == 'Wh':
+        df /= 1
+    
+    elif units == 'kWh':
+        df /= 1000
+        
+    elif units == 'MWh':
+        df /= 1000000
+    
+    # Resample data into monthly energy produced
+    array_monthly = df.resample('M').sum()
     
     # Reshape the dataframe 
     new_index = pd.Index([d.strftime('%Y-%m') for d in array_monthly.index])
@@ -131,9 +151,20 @@ def main():
     # add the values to the top of each bar
     for i in ax.containers:
         ax.bar_label(i, label_type='edge')
-        
-    plt.ylabel('Energy [kWh]')
+    
+    plt.ylabel('Energy [' + units + ']')
     plt.tight_layout()
+
+def plot_daily(day):
+    
+    global df_meteo, df_day
+    df_meteo = pd.DataFrame(data.loc[day])
+    df_day = pd.DataFrame(results.loc[day])
+    df_day = df_day.clip(lower=0)
+    
+    
+    
+    
 
 if __name__ == "__main__":
     main()
