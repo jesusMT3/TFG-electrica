@@ -10,7 +10,7 @@ https://re.jrc.ec.europa.eu/pvg_tools/en/#TMY
 # Libraries
 
 import warnings
-from pvlib import pvsystem, iotools, location, modelchain
+from pvlib import pvsystem, iotools, location, modelchain, ivtools
 from pvlib.temperature import TEMPERATURE_MODEL_PARAMETERS as PARAMS
 import tkinter as tk
 from tkinter import filedialog
@@ -41,14 +41,12 @@ albedo = 0.2
 def main():
     
     # Global variables and objects
-<<<<<<< HEAD
     global site_location, orientation, irrad, system, array_monthly, array_power, cec_inverters, results
     
     # Load meteorological data
     load_data()
      
-=======
-    global site_location, orientation, irrad, system, array_monthly, array_power, cec_inverters
+    global site_location, orientation, irrad, system, array_monthly, array_power, cec_inverters, module
     module = 'LONGi_Green_Energy_Technology_Co___Ltd__LR6_72BP_350M'
     inverter = 'ABB__PVI_10_0_I_OUTD_x_US_480_y_z__480V_'
     
@@ -60,7 +58,6 @@ def main():
       
     solar_position = site_location.get_solarposition(data.index)
     
->>>>>>> 92fba3471085c8f94a2c07aa68f6b4e175ebad37
     # Choose solar pannels and inverters, and the temperature models
     temp_model_parameters = PARAMS['sapm']['open_rack_glass_glass']
     cec_modules = pvsystem.retrieve_sam('CECMod')
@@ -140,6 +137,7 @@ def load_data():
 
     solar_position = site_location.get_solarposition(data.index)
 
+
 def plot_monthly(units):
     
     df = pd.DataFrame(results)
@@ -175,13 +173,42 @@ def plot_monthly(units):
 
 def plot_daily(day):
     
-    global df_meteo, df_day
+    global df_merged
+    
     df_meteo = pd.DataFrame(data.loc[day])
     df_day = pd.DataFrame(results.loc[day])
     df_day = df_day.clip(lower=0)
     
+    df_merged = pd.merge(df_day, df_meteo[['dhi', 'dni']], left_index=True, right_index=True)
+    df_merged = df_merged.rename(columns = {0: 'Power'})
+    df_merged = df_merged[df_merged['Power'] > 0]
+    # Plot data
+    fig, ax1 = plt.subplots(figsize = (10, 6))
+
+    # create second axis
+    ax2 = ax1.twinx()
     
+    # plot df_day on the left axis
+    ax1.plot(df_merged.index, df_merged['Power'], color='blue', label='Power')
     
+    # plot df_meteo on the right axis
+    ax2.plot(df_merged.index, df_merged['dhi'], color='red', label='dhi')
+    ax2.plot(df_merged.index, df_merged['dni'] , color='green', label='dni')
+    
+    # Make the axis better
+    
+    # set axis labels
+    ax1.set_xlabel(day)
+    ax1.set_ylabel('kWh')
+    ax2.set_ylabel('W/m$^2$')
+    
+    # add legend
+    ax1.legend(loc='upper left')
+    ax2.legend(loc='upper right')
+
+    # show the plot
+    plt.tight_layout()
+    plt.show()
     
 
 if __name__ == "__main__":
