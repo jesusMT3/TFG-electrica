@@ -8,6 +8,7 @@ Created on Wed Apr 19 10:04:51 2023
 # Import libraries
 import webbrowser, warnings, pvfactors
 import tkinter as tk
+import pandas as pd
 from tkinter import filedialog, ttk
 from pvlib import iotools, location, pvsystem
 
@@ -26,7 +27,7 @@ bifacial_modules = cec_modules[cec_modules['Bifacial'] == 1]
 
 def main():
     
-    global data_dict, module, inverter
+    global data_dict, module, inverter, data
     
     # Create main window
     root = tk.Tk()
@@ -38,6 +39,8 @@ def main():
                  "module": tk.StringVar(value = 'LONGi_Green_Energy_Technology_Co___Ltd__LR6_72BP_350M'),
                  "inverter": tk.StringVar(value = 'ABB__PVI_10_0_I_OUTD_x_US_480_y_z__480V_')}
 
+    module = pd.DataFrame(cec_modules.loc[data_dict['module'].get()])
+    inverter = pd.DataFrame(cec_inverters.loc[data_dict['inverter'].get()])
     
     # Set size to the pc's window size
     root.geometry("1080x720")
@@ -76,16 +79,14 @@ def main():
     
     # Module selector
     module_selector = ttk.Combobox(root, values = bifacial_modules.index.tolist(), textvariable=data_dict["module"])
-    module_selector.pack()
+    module_selector.pack() 
     
-    # Inverter selector
-    inverter_selector = ttk.Combobox(root, values = cec_inverters.index.tolist(), textvariable=data_dict["inverter"])
-    inverter_selector.pack()
+    # Module parameters configuration
+    name_module = tk.Button(root, textvariable=data_dict['module'], command = open_module_parameters)
+    name_module.pack()
     
-    # Load parameters option
-    load_parameters_button = tk.Button(root, text = 'Load parameters', command = load_parameters)
-    load_parameters_button.pack()
-    
+    # List of module atributes
+
     # Main loop
     root.mainloop()
     
@@ -119,19 +120,51 @@ def plot_daily():
     units = data_dict['units'].get()
     
 def load_parameters():
-    # Get the sel
-    module_name = data_dict['module'].get()
-    inverter_name = data_dict['inverter'].get()
-    
-    module = bifacial_modules.loc[module_name]
-    inverter = cec_inverters.loc[inverter_name]
-    
     print(module)
     
 def print_data():
     string_dict = {key: var.get() for key, var in data_dict.items()}
     print(string_dict)
     
+def open_module_parameters():
+    module_window = tk.Tk()
+    # Create Treeview widget
+    pd.DataFrame(cec_modules.loc[data_dict['module'].get()])
     
+    tree = ttk.Treeview(module_window, columns=('module_index', 'module_value'))
+    
+    # Define columns
+    tree.column('#0', width=0, stretch=tk.NO)
+    tree.column('module_index', anchor=tk.CENTER, width=100)
+    tree.column('module_value', anchor=tk.CENTER, width=100)
+    
+    # Define column headings
+    tree.heading('#0', text='', anchor=tk.CENTER)
+    tree.heading('module_index', text='Module Index', anchor=tk.CENTER)
+    tree.heading('module_value', text='Module Value', anchor=tk.CENTER)
+    
+    # Add data to Treeview
+    for i, index in enumerate(module.index):
+        value = module.loc[index].values
+        tree.insert('', i, values = (index, value))
+        
+    # Pack Treeview
+    tree.pack(expand=True, fill=tk.BOTH)
+    
+    def update_treeview(tree, module_data):
+        # Remove previous data from Treeview
+        tree.delete(*tree.get_children())
+    
+        # Add new data to Treeview
+        for i, index in enumerate(module_data.index):
+            value = module_data.loc[index]
+            tree.insert('', i, values=(index, value))
+            
+    
+            
+    data_dict["module"].trace("w", update_treeview)
+    
+    module_window.mainloop()
+
 if __name__ == "__main__":
     main()
