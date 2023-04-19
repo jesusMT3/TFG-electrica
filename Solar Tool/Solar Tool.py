@@ -35,7 +35,6 @@ modules_per_string = 10
 strings = 4
 pannel_azimuth = 30
 pannel_tilt = 30
-albedo = 0.2
 
 
 def main():
