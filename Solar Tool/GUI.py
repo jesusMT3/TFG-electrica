@@ -11,6 +11,8 @@ import tkinter as tk
 import pandas as pd
 from tkinter import filedialog, ttk
 from pvlib import iotools, location, pvsystem
+from pandastable import Table, TableModel
+
 
 # supressing shapely warnings that occur on import of pvfactors
 warnings.filterwarnings(action='ignore', module='pvfactors')
@@ -24,10 +26,11 @@ tracking_options = ['track', 'backtrack', 'none']
 cec_modules = pvsystem.retrieve_sam('CECMod').T
 cec_inverters = pvsystem.retrieve_sam('cecinverter').T
 bifacial_modules = cec_modules[cec_modules['Bifacial'] == 1]
+my_module = pd.DataFrame(bifacial_modules.loc['LONGi_Green_Energy_Technology_Co___Ltd__LR6_72BP_350M'])
 
 def main():
     
-    global data_dict, module, inverter, data
+    global data_dict, my_module, my_inverter, data
     
     # Create main window
     root = tk.Tk()
@@ -39,8 +42,8 @@ def main():
                  "module": tk.StringVar(value = 'LONGi_Green_Energy_Technology_Co___Ltd__LR6_72BP_350M'),
                  "inverter": tk.StringVar(value = 'ABB__PVI_10_0_I_OUTD_x_US_480_y_z__480V_')}
 
-    module = pd.DataFrame(cec_modules.loc[data_dict['module'].get()])
-    inverter = pd.DataFrame(cec_inverters.loc[data_dict['inverter'].get()])
+    # my_module = pd.DataFrame(cec_modules.loc[data_dict['module'].get()])
+    # my_inverter = pd.DataFrame(cec_inverters.loc[data_dict['inverter'].get()])
     
     # Set size to the pc's window size
     root.geometry("1080x720")
@@ -120,50 +123,30 @@ def plot_daily():
     units = data_dict['units'].get()
     
 def load_parameters():
-    print(module)
+    print(my_module)
     
 def print_data():
-    string_dict = {key: var.get() for key, var in data_dict.items()}
-    print(string_dict)
+    print(my_module)
     
 def open_module_parameters():
-    module_window = tk.Tk()
-    # Create Treeview widget
-    pd.DataFrame(cec_modules.loc[data_dict['module'].get()])
-    
-    tree = ttk.Treeview(module_window, columns=('module_index', 'module_value'))
-    
-    # Define columns
-    tree.column('#0', width=0, stretch=tk.NO)
-    tree.column('module_index', anchor=tk.CENTER, width=100)
-    tree.column('module_value', anchor=tk.CENTER, width=100)
-    
-    # Define column headings
-    tree.heading('#0', text='', anchor=tk.CENTER)
-    tree.heading('module_index', text='Module Index', anchor=tk.CENTER)
-    tree.heading('module_value', text='Module Value', anchor=tk.CENTER)
-    
-    # Add data to Treeview
-    for i, index in enumerate(module.index):
-        value = module.loc[index].values
-        tree.insert('', i, values = (index, value))
-        
-    # Pack Treeview
-    tree.pack(expand=True, fill=tk.BOTH)
-    
-    def update_treeview(tree, module_data):
-        # Remove previous data from Treeview
-        tree.delete(*tree.get_children())
-    
-        # Add new data to Treeview
-        for i, index in enumerate(module_data.index):
-            value = module_data.loc[index]
-            tree.insert('', i, values=(index, value))
-            
-    
-            
-    data_dict["module"].trace("w", update_treeview)
-    
+    my_module = pd.DataFrame(cec_modules.loc[data_dict['module'].get()])
+    my_module.insert(0, "Index", my_module.index)
+    module_window = tk.Toplevel()
+    module_window.title("Módulo de parámetros")
+
+    # crea el modelo de datos de la tabla
+    model = TableModel()
+    model.df = my_module
+
+    # crea el marco para la tabla
+    table_frame = tk.Frame(module_window)
+    table_frame.pack(fill="both", expand=True)
+
+    # crea la tabla utilizando el modelo de datos
+    table = Table(table_frame, model=model, showtoolbar=True, showstatusbar=True)
+    table.show()
+
+    # inicia el bucle principal de Tkinter
     module_window.mainloop()
 
 if __name__ == "__main__":
