@@ -36,100 +36,37 @@ strings = 4
 pannel_azimuth = 30
 pannel_tilt = 30
 
+module = 'LONGi_Green_Energy_Technology_Co___Ltd__LR6_72BP_350M'
+inverter = 'ABB__PVI_10_0_I_OUTD_x_US_480_y_z__480V_'
+temp_model_parameters = PARAMS['sapm']['open_rack_glass_glass']
+cec_modules = pvsystem.retrieve_sam('CECMod')
+cec_inverters = pvsystem.retrieve_sam('cecinverter')
+bifacial_modules = cec_modules.T[cec_modules.T['Bifacial'] == 1].T
+
+results = pd.DataFrame()
 
 def main():
     
     # Global variables and objects
-    global site_location, orientation, irrad, system, array_monthly, array_power, cec_inverters, results
+    global my_module, my_inverter, results, temp_model_parameters
     
     # Load meteorological data
     load_data()
-     
-    global site_location, orientation, irrad, system, array_monthly, array_power, cec_inverters, module
-    module = 'LONGi_Green_Energy_Technology_Co___Ltd__LR6_72BP_350M'
-    inverter = 'ABB__PVI_10_0_I_OUTD_x_US_480_y_z__480V_'
-    
-    # Load meteorological data
-    meteo_file = tk.filedialog.askopenfilename()
-    data, metadata = iotools.read_epw(meteo_file, coerce_year = 2020)
-    site_location = location.Location(latitude = metadata['latitude'],
-                                      longitude = metadata['longitude'])
-      
-    solar_position = site_location.get_solarposition(data.index)
     
     # Choose solar pannels and inverters, and the temperature models
-    temp_model_parameters = PARAMS['sapm']['open_rack_glass_glass']
-    cec_modules = pvsystem.retrieve_sam('CECMod')
-    cec_inverters = pvsystem.retrieve_sam('cecinverter')
+    my_module = bifacial_modules[module]
+    my_inverter = cec_inverters[inverter]
     
-    bifacial_modules = cec_modules.T[cec_modules.T['Bifacial'] == 1].T
-    module = bifacial_modules[module]
-    inverter = cec_inverters[inverter]
-    
-    if backtrack == True:
-        sat_mount = pvsystem.SingleAxisTrackerMount(axis_tilt=axis_tilt,
-                                                axis_azimuth=axis_azimuth,
-                                                max_angle=max_angle,
-                                                backtrack=True,
-                                                gcr=gcr)
-    
-        # created for use in pvfactors timeseries
-        orientation = sat_mount.get_orientation(solar_position['apparent_zenith'],
-                                            solar_position['azimuth'])
-    else:
-        sat_mount = pvsystem.FixedMount(surface_tilt = pannel_tilt,
-                                        surface_azimuth = pannel_azimuth)
-        
-        orientation = sat_mount.get_orientation(solar_position['apparent_zenith'],
-                                            solar_position['azimuth'])
-
-    # get bifacial irradiance
-    irrad = pvfactors_timeseries(solar_position['azimuth'],
-                                 solar_position['apparent_zenith'],
-                                 orientation['surface_azimuth'],
-                                 orientation['surface_tilt'],
-                                 axis_azimuth,
-                                 data.index,
-                                 data['dni'],
-                                 data['dhi'],
-                                 gcr,
-                                 pvrow_height,
-                                 pvrow_width,
-                                 albedo,
-                                 n_pvrows=3,
-                                 index_observed_pvrow=1
-                                 )
-
-    irrad = pd.concat(irrad, axis = 1)
-
-    # create bifacial effective irradiance using aoi-corrected timeseries values
-    irrad['effective_irradiance'] = (irrad['total_abs_front'] + (irrad['total_abs_back'] * bifaciality))
-
-    # dc arrays
-    array = pvsystem.Array(mount=sat_mount,
-                           module_parameters = module,
-                           temperature_model_parameters = temp_model_parameters,
-                           modules_per_string = modules_per_string,
-                           strings = strings)
-    
-    # create system object
-    system = pvsystem.PVSystem(arrays = [array],
-                               inverter_parameters = inverter,
-                               modules_per_string = modules_per_string,
-                               strings_per_inverter = strings,
-                               albedo = albedo)
-    
-    mc_bifi = modelchain.ModelChain(system, site_location, aoi_model='no_loss')
-    mc_bifi.run_model_from_effective_irradiance(irrad)
-    results = pd.DataFrame(mc_bifi.results.ac)
+    results = calc_model()
     
     # plot results
-    plot_monthly('kWh')
-    plot_daily('2020-12-21')
+    title = 'IES data'
+    plot_monthly('kWh', title)
+    plot_daily('2020-07-21')
 
 def load_data():
     global data, metadata, site_location, solar_position
-    meteo_file = tk.filedialog.askopenfilename()
+    meteo_file = filedialog.askopenfilename()
     data, metadata = iotools.read_epw(meteo_file, coerce_year = 2020)
     site_location = location.Location(latitude = metadata['latitude'],
                                       longitude = metadata['longitude'])
@@ -137,7 +74,7 @@ def load_data():
     solar_position = site_location.get_solarposition(data.index)
 
 
-def plot_monthly(units):
+def plot_monthly(units, title):
     
     df = pd.DataFrame(results)
     
@@ -168,6 +105,7 @@ def plot_monthly(units):
         ax.bar_label(i, label_type='edge')
     
     plt.ylabel('Energy [' + units + ']')
+    plt.title(title)
     plt.tight_layout()
 
 def plot_daily(day):
@@ -209,6 +147,64 @@ def plot_daily(day):
     plt.tight_layout()
     plt.show()
     
+def calc_model():
+    if backtrack == True:
+        sat_mount = pvsystem.SingleAxisTrackerMount(axis_tilt=axis_tilt,
+                                                axis_azimuth=axis_azimuth,
+                                                max_angle=max_angle,
+                                                backtrack=True,
+                                                gcr=gcr)
+    
+        # created for use in pvfactors timeseries
+        orientation = sat_mount.get_orientation(solar_position['apparent_zenith'],
+                                            solar_position['azimuth'])
+    else:
+        sat_mount = pvsystem.FixedMount(surface_tilt = pannel_tilt,
+                                        surface_azimuth = pannel_azimuth)
+        
+        orientation = sat_mount.get_orientation(solar_position['apparent_zenith'],
+                                            solar_position['azimuth'])
 
+    # get bifacial irradiance
+    irrad = pvfactors_timeseries(solar_position['azimuth'],
+                                 solar_position['apparent_zenith'],
+                                 orientation['surface_azimuth'],
+                                 orientation['surface_tilt'],
+                                 axis_azimuth,
+                                 data.index,
+                                 data['dni'],
+                                 data['dhi'],
+                                 gcr,
+                                 pvrow_height,
+                                 pvrow_width,
+                                 albedo,
+                                 n_pvrows=3,
+                                 index_observed_pvrow=1
+                                 )
+
+    irrad = pd.concat(irrad, axis = 1)
+
+    # create bifacial effective irradiance using aoi-corrected timeseries values
+    irrad['effective_irradiance'] = (irrad['total_abs_front'] + (irrad['total_abs_back'] * bifaciality))
+
+    # dc arrays
+    array = pvsystem.Array(mount=sat_mount,
+                           module_parameters = my_module,
+                           temperature_model_parameters = temp_model_parameters,
+                           modules_per_string = modules_per_string,
+                           strings = strings)
+    
+    # create system object
+    system = pvsystem.PVSystem(arrays = [array],
+                               inverter_parameters = my_inverter,
+                               modules_per_string = modules_per_string,
+                               strings_per_inverter = strings,
+                               albedo = albedo)
+    
+    mc_bifi = modelchain.ModelChain(system, site_location, aoi_model='no_loss')
+    mc_bifi.run_model_from_effective_irradiance(irrad)
+    results = pd.DataFrame(mc_bifi.results.ac)
+    return results
+    
 if __name__ == "__main__":
     main()

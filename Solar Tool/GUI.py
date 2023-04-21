@@ -26,12 +26,15 @@ tracking_options = ['track', 'backtrack', 'none']
 cec_modules = pvsystem.retrieve_sam('CECMod').T
 cec_inverters = pvsystem.retrieve_sam('cecinverter').T
 bifacial_modules = cec_modules[cec_modules['Bifacial'] == 1]
-my_module = pd.DataFrame(bifacial_modules.loc['LONGi_Green_Energy_Technology_Co___Ltd__LR6_72BP_350M'])
+
+# Initialize module
+
 
 def main():
     
     global data_dict, my_module, my_inverter, data
-    
+    my_module = pd.DataFrame(bifacial_modules.loc['LONGi_Green_Energy_Technology_Co___Ltd__LR6_72BP_350M'])
+    my_module.insert(0, 'Index', my_module.index)
     # Create main window
     root = tk.Tk()
     root.title('main')
@@ -83,13 +86,25 @@ def main():
     # Module selector
     module_selector = ttk.Combobox(root, values = bifacial_modules.index.tolist(), textvariable=data_dict["module"])
     module_selector.pack() 
+    module_selector.bind("<<ComboboxSelected>>", lambda event: updateModule(my_module, model, table))
     
     # Module parameters configuration
-    name_module = tk.Button(root, textvariable=data_dict['module'], command = open_module_parameters)
+    name_module = tk.Button(root, text = 'Load parameters', command = lambda: updateModule(my_module, model, table))
     name_module.pack()
     
-    # List of module atributes
+    # Module dataframe
+    model = TableModel()
+    model.df = my_module
 
+    # Module frame
+    table_frame = tk.Frame(root)
+    table_frame.pack(fill="both", expand=True)
+
+    # Create table with module frame
+    table = Table(table_frame, model=model, showtoolbar=True, showstatusbar=True)
+    table.show()
+    
+    
     # Main loop
     root.mainloop()
     
@@ -122,32 +137,16 @@ def plot_monthly():
 def plot_daily():
     units = data_dict['units'].get()
     
-def load_parameters():
-    print(my_module)
-    
 def print_data():
+    my_module.update(my_module)
     print(my_module)
     
-def open_module_parameters():
-    my_module = pd.DataFrame(cec_modules.loc[data_dict['module'].get()])
-    my_module.insert(0, "Index", my_module.index)
-    module_window = tk.Toplevel()
-    module_window.title("Módulo de parámetros")
-
-    # crea el modelo de datos de la tabla
-    model = TableModel()
+def updateModule(my_module, model, table):
+    my_module = pd.DataFrame(bifacial_modules.loc[data_dict['module'].get()])
+    my_module.insert(0, 'Index', my_module.index)
     model.df = my_module
-
-    # crea el marco para la tabla
-    table_frame = tk.Frame(module_window)
-    table_frame.pack(fill="both", expand=True)
-
-    # crea la tabla utilizando el modelo de datos
-    table = Table(table_frame, model=model, showtoolbar=True, showstatusbar=True)
-    table.show()
-
-    # inicia el bucle principal de Tkinter
-    module_window.mainloop()
+    table.redraw()
+    print(my_module)
 
 if __name__ == "__main__":
     main()
