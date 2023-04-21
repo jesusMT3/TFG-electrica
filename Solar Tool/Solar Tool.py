@@ -17,6 +17,7 @@ from tkinter import filedialog
 from pvlib.bifacial.pvfactors import pvfactors_timeseries
 import pandas as pd
 import matplotlib.pyplot as plt
+import tkinter as tk
 
 # supressing shapely warnings that occur on import of pvfactors
 warnings.filterwarnings(action='ignore', module='pvfactors')
