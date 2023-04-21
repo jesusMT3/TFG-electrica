@@ -9,7 +9,7 @@ https://re.jrc.ec.europa.eu/pvg_tools/en/#TMY
 
 # Libraries
 
-import warnings
+import warnings, webbrowser, os, sys
 from pvlib import pvsystem, iotools, location, modelchain, ivtools
 from pvlib.temperature import TEMPERATURE_MODEL_PARAMETERS as PARAMS
 import tkinter as tk
@@ -18,6 +18,7 @@ from pvlib.bifacial.pvfactors import pvfactors_timeseries
 import pandas as pd
 import matplotlib.pyplot as plt
 import tkinter as tk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 # supressing shapely warnings that occur on import of pvfactors
 warnings.filterwarnings(action='ignore', module='pvfactors')
@@ -44,28 +45,51 @@ cec_modules = pvsystem.retrieve_sam('CECMod')
 cec_inverters = pvsystem.retrieve_sam('cecinverter')
 bifacial_modules = cec_modules.T[cec_modules.T['Bifacial'] == 1].T
 
-results = pd.DataFrame()
-
 def main():
     
     # Global variables and objects
-    global my_module, my_inverter, results, temp_model_parameters
+    global my_module, my_inverter
+    
+    # Create main window
+    root = tk.Tk()
+    root.title('main')
+    
+    # PVGIS TMY data website
+    url_button = tk.Button(root, text="PVGIS data web site", command=open_url)
+    url_button.pack()
     
     # Load meteorological data
-    load_data()
+    button_load_data = tk.Button(root, text='Load data', command=load_data)
+    button_load_data.pack()
     
     # Choose solar pannels and inverters, and the temperature models
     my_module = bifacial_modules[module]
     my_inverter = cec_inverters[inverter]
     
-    results = calc_model()
+    # Calculate model
+    button_calc_model = tk.Button(root, text = 'Calculate model', command = calc_model)
+    button_calc_model.pack()
     
-    # plot results
-    title = 'IES data'
-    plot_monthly('kWh', title)
-    plot_daily('2020-07-21')
+    # create a tkinter frame for the plot
+    plot_frame = tk.Frame(root)
+    plot_frame.pack()
+    
+    # call the modified function to get the Figure instance
+    plot_button = tk.Button(root, text = 'Plot monthly', command = lambda: plot_on_canvas(canvas))
+    plot_button.pack()
+    
+    canvas = tk.Canvas(root, width=10*100, height=6*100)
+    canvas.pack()
 
+    # start the tkinter event loop
+    root.mainloop()
+
+####################################################################################################
+# Functions
+
+# Load data from .epw file
 def load_data():
+    
     global data, metadata, site_location, solar_position
     meteo_file = filedialog.askopenfilename()
     data, metadata = iotools.read_epw(meteo_file, coerce_year = 2020)
@@ -73,10 +97,16 @@ def load_data():
                                       longitude = metadata['longitude'])
 
     solar_position = site_location.get_solarposition(data.index)
+    return data, metadata, site_location, solar_position
 
-
-def plot_monthly(units, title):
+# Open TMY data URL    
+def open_url():
+    url = "https://re.jrc.ec.europa.eu/pvg_tools/en/#TMY"
+    webbrowser.open_new(url)
     
+# Plot energy data by months graph bar
+def plot_monthly(units, title):
+    global fig
     df = pd.DataFrame(results)
     
     # Cut powers lower to zero
@@ -99,23 +129,37 @@ def plot_monthly(units, title):
     new_index = pd.Index([d.strftime('%Y-%m') for d in array_monthly.index])
     array_monthly.index = new_index
     
-    ax = array_monthly.plot(kind='bar', figsize=(10, 6))
-    
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    array_monthly.plot(kind='bar', ax=ax)
+
     # add the values to the top of each bar
     for i in ax.containers:
         ax.bar_label(i, label_type='edge')
-    
-    plt.ylabel('Energy [' + units + ']')
-    plt.title(title)
+
+    ax.set_ylabel('Energy [' + units + ']')
+    ax.set_title(title)
+
     plt.tight_layout()
 
-def plot_daily(day):
-    
-    global df_merged
+    return fig
+
+
+# Plot energy data by hourly power data
+def plot_daily(day, units):
     
     df_meteo = pd.DataFrame(data.loc[day])
     df_day = pd.DataFrame(results.loc[day])
     df_day = df_day.clip(lower=0)
+    
+    if units == 'W':
+        df_day /= 1
+    
+    elif units == 'kW':
+        df_day /= 1000
+        
+    elif units == 'MW':
+        df_day /= 1000000
     
     df_merged = pd.merge(df_day, df_meteo[['dhi', 'dni']], left_index=True, right_index=True)
     df_merged = df_merged.rename(columns = {0: 'Power'})
@@ -137,7 +181,7 @@ def plot_daily(day):
     
     # set axis labels
     ax1.set_xlabel(day)
-    ax1.set_ylabel('kWh')
+    ax1.set_ylabel(units)
     ax2.set_ylabel('W/m$^2$')
     
     # add legend
@@ -148,7 +192,29 @@ def plot_daily(day):
     plt.tight_layout()
     plt.show()
     
+def plot_on_canvas(frame):
+    # Remove any previous plot from the frame
+    for widget in frame.winfo_children():
+        widget.destroy()
+    
+    # Get the figure from the plot_monthly function
+    fig = plot_monthly('kWh', 'Monthly Energy Data')
+    
+    # Get the Tkinter widget for the figure
+    canvas = FigureCanvasTkAgg(fig, master=frame)
+    canvas_widget = canvas.get_tk_widget()
+    
+    # Pack the canvas widget inside the frame
+    canvas_widget.pack(side="top", fill="both", expand=True)
+    
+    # Set the row and column of the frame to expand with window size changes
+    frame.grid_rowconfigure(0, weight=1)
+    frame.grid_columnconfigure(0, weight=1)
+    
 def calc_model():
+    
+    global results
+    
     if backtrack == True:
         sat_mount = pvsystem.SingleAxisTrackerMount(axis_tilt=axis_tilt,
                                                 axis_azimuth=axis_azimuth,
@@ -168,20 +234,20 @@ def calc_model():
 
     # get bifacial irradiance
     irrad = pvfactors_timeseries(solar_position['azimuth'],
-                                 solar_position['apparent_zenith'],
-                                 orientation['surface_azimuth'],
-                                 orientation['surface_tilt'],
-                                 axis_azimuth,
-                                 data.index,
-                                 data['dni'],
-                                 data['dhi'],
-                                 gcr,
-                                 pvrow_height,
-                                 pvrow_width,
-                                 albedo,
-                                 n_pvrows=3,
-                                 index_observed_pvrow=1
-                                 )
+                                  solar_position['apparent_zenith'],
+                                  orientation['surface_azimuth'],
+                                  orientation['surface_tilt'],
+                                  axis_azimuth,
+                                  data.index,
+                                  data['dni'],
+                                  data['dhi'],
+                                  gcr,
+                                  pvrow_height,
+                                  pvrow_width,
+                                  albedo,
+                                  n_pvrows=3,
+                                  index_observed_pvrow=1
+                                  )
 
     irrad = pd.concat(irrad, axis = 1)
 
@@ -190,17 +256,17 @@ def calc_model():
 
     # dc arrays
     array = pvsystem.Array(mount=sat_mount,
-                           module_parameters = my_module,
-                           temperature_model_parameters = temp_model_parameters,
-                           modules_per_string = modules_per_string,
-                           strings = strings)
+                            module_parameters = my_module,
+                            temperature_model_parameters = temp_model_parameters,
+                            modules_per_string = modules_per_string,
+                            strings = strings)
     
     # create system object
     system = pvsystem.PVSystem(arrays = [array],
-                               inverter_parameters = my_inverter,
-                               modules_per_string = modules_per_string,
-                               strings_per_inverter = strings,
-                               albedo = albedo)
+                                inverter_parameters = my_inverter,
+                                modules_per_string = modules_per_string,
+                                strings_per_inverter = strings,
+                                albedo = albedo)
     
     mc_bifi = modelchain.ModelChain(system, site_location, aoi_model='no_loss')
     mc_bifi.run_model_from_effective_irradiance(irrad)
