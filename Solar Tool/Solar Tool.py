@@ -20,9 +20,13 @@ import matplotlib.pyplot as plt
 import tkinter as tk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
+import matplotlib.image as img
 
 # supressing shapely warnings that occur on import of pvfactors
 warnings.filterwarnings(action='ignore', module='pvfactors')
+
+# IES ISI logo
+ISI_logo = os.getcwd() + '\IES_logo.jpg'
 
 # Global variables
 backtrack = True
@@ -39,6 +43,8 @@ strings = 4
 pannel_azimuth = 30
 pannel_tilt = 30
 
+type_options = ['Monthly Energy', 'Yield', 'Bifacial Gain', 'Performance Ratio']
+
 module = 'LONGi_Green_Energy_Technology_Co___Ltd__LR6_72BP_350M'
 inverter = 'ABB__PVI_10_0_I_OUTD_x_US_480_y_z__480V_'
 temp_model_parameters = PARAMS['sapm']['open_rack_glass_glass']
@@ -50,10 +56,12 @@ def main():
     
     # Global variables and objects
     global my_module, my_inverter
-    
+       
     # Create main window
     root = tk.Tk()
     root.title('main')
+    
+    opts_dict = {"type_plot": tk.StringVar(value = 'Monthly Energy')}
     
     # PVGIS TMY data website
     url_button = tk.Button(root, text="PVGIS data web site", command=open_url)
@@ -75,11 +83,17 @@ def main():
     plot_frame = tk.Frame(root)
     plot_frame.pack()
     
+    type_plot_label = tk.Label(root, text="Plot type:")
+    type_plot_label.pack()
+    type_plot = tk.OptionMenu(root, opts_dict["type_plot"], *type_options)
+    type_plot.pack()
+    
     # call the modified function to get the Figure instance
-    plot_button = tk.Button(root, text = 'Plot monthly', command = lambda: plot_on_canvas(canvas))
+    plot_button = tk.Button(root, text = 'Plot', command = lambda: plot_on_canvas(canvas, opts_dict))
     plot_button.pack()
     
-    canvas = tk.Canvas(root, width=10*100, height=6*100)
+    canvas = tk.Canvas(root, width=900, height=500)
+    canvas.pack_propagate(0)
     canvas.pack()
 
     # start the tkinter event loop
@@ -179,8 +193,6 @@ def plot_bifacial_gains():
     # Cut powers lower to zero
     df = df.clip(lower=0)
     
-    
-    
     # Resample data into monthly energy produced
     array_monthly = df.resample('M').sum()
     bif_gains = 100 * (array_monthly['bifacial'] - array_monthly['non bifacial']) / array_monthly['bifacial']
@@ -207,15 +219,23 @@ def plot_bifacial_gains():
 def plot_pr():
     print(':)')
     
-def plot_on_canvas(frame):
+def plot_on_canvas(frame, opts_dict):
+    
+    fig = plt.Figure()
+    
     # Remove any previous plot from the frame
     for widget in frame.winfo_children():
         widget.destroy()
     
     # Get the figure from the plot_monthly function
-    # fig = plot_monthly()
-    fig = plot_yield()
-    # fig = plot_bifacial_gains()
+    if (opts_dict['type_plot'].get() == 'Monthly Energy'):
+        fig = plot_monthly()
+        
+    elif (opts_dict['type_plot'].get() == 'Yield'):        
+        fig = plot_yield()
+        
+    elif (opts_dict['type_plot'].get() == 'Bifacial Gain'): 
+        fig = plot_bifacial_gains()
     
     # Get the Tkinter widget for the figure
     canvas = FigureCanvasTkAgg(fig, master=frame)
