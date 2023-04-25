@@ -19,6 +19,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import tkinter as tk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import numpy as np
 
 # supressing shapely warnings that occur on import of pvfactors
 warnings.filterwarnings(action='ignore', module='pvfactors')
@@ -105,22 +106,16 @@ def open_url():
     webbrowser.open_new(url)
     
 # Plot energy data by months graph bar
-def plot_monthly(units, title):
+def plot_monthly():
+    
     global fig
     df = pd.DataFrame(results)
     
     # Cut powers lower to zero
     df = df.clip(lower=0)
     
-    # Reshape with units parameter
-    if units == 'Wh':
-        df /= 1
-    
-    elif units == 'kWh':
-        df /= 1000
-        
-    elif units == 'MWh':
-        df /= 1000000
+    # Get energy into kWh
+    df /= 1000
     
     # Resample data into monthly energy produced
     array_monthly = df.resample('M').sum()
@@ -131,66 +126,86 @@ def plot_monthly(units, title):
     
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    array_monthly.plot(kind='bar', ax=ax)
+    array_monthly['bifacial'].plot(kind='bar', ax=ax)
 
     # add the values to the top of each bar
     for i in ax.containers:
         ax.bar_label(i, label_type='edge')
 
-    ax.set_ylabel('Energy [' + units + ']')
-    ax.set_title(title)
+    ax.set_ylabel('[kWh]')
+    ax.set_title('Monthly energy generated')
 
     plt.tight_layout()
-
     return fig
 
+def plot_yield():
+    global fig
+    
+    pp = my_module['STC'] * modules_per_string * strings
+    df = pd.DataFrame(results)
+    
+    # Cut powers lower to zero
+    df = df.clip(lower=0)
+    
+    # Get energy per peak power
+    df /= pp
+    
+    # Resample data into monthly energy produced
+    array_monthly = df.resample('M').sum()
+    
+    # Reshape the dataframe 
+    new_index = pd.Index([d.strftime('%Y-%m') for d in array_monthly.index])
+    array_monthly.index = new_index
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    array_monthly['bifacial'].plot(kind='bar', ax=ax)
 
-# Plot energy data by hourly power data
-def plot_daily(day, units):
-    
-    df_meteo = pd.DataFrame(data.loc[day])
-    df_day = pd.DataFrame(results.loc[day])
-    df_day = df_day.clip(lower=0)
-    
-    if units == 'W':
-        df_day /= 1
-    
-    elif units == 'kW':
-        df_day /= 1000
-        
-    elif units == 'MW':
-        df_day /= 1000000
-    
-    df_merged = pd.merge(df_day, df_meteo[['dhi', 'dni']], left_index=True, right_index=True)
-    df_merged = df_merged.rename(columns = {0: 'Power'})
-    df_merged = df_merged[df_merged['Power'] > 0]
-    # Plot data
-    fig, ax1 = plt.subplots(figsize = (10, 6))
+    # add the values to the top of each bar
+    for i in ax.containers:
+        ax.bar_label(i, label_type='edge')
 
-    # create second axis
-    ax2 = ax1.twinx()
-    
-    # plot df_day on the left axis
-    ax1.plot(df_merged.index, df_merged['Power'], color='blue', label='Power')
-    
-    # plot df_meteo on the right axis
-    ax2.plot(df_merged.index, df_merged['dhi'], color='red', label='dhi')
-    ax2.plot(df_merged.index, df_merged['dni'] , color='green', label='dni')
-    
-    # Make the axis better
-    
-    # set axis labels
-    ax1.set_xlabel(day)
-    ax1.set_ylabel(units)
-    ax2.set_ylabel('W/m$^2$')
-    
-    # add legend
-    ax1.legend(loc='upper left')
-    ax2.legend(loc='upper right')
+    ax.set_ylabel('[kWh/kWp]')
+    ax.set_title('Yield ratio')
 
-    # show the plot
     plt.tight_layout()
-    plt.show()
+    return fig
+
+def plot_bifacial_gains():
+    
+    global fig
+    
+    df = pd.DataFrame(results)
+    
+    # Cut powers lower to zero
+    df = df.clip(lower=0)
+    
+    
+    
+    # Resample data into monthly energy produced
+    array_monthly = df.resample('M').sum()
+    bif_gains = 100 * (array_monthly['bifacial'] - array_monthly['non bifacial']) / array_monthly['bifacial']
+    
+    # Reshape the dataframe 
+    new_index = pd.Index([d.strftime('%Y-%m') for d in array_monthly.index])
+    bif_gains.index = new_index
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    bif_gains.plot(kind='bar', ax=ax)
+
+    # add the values to the top of each bar
+    for i in ax.containers:
+        ax.bar_label(i, label_type='edge')
+
+
+    ax.set_ylabel('[%]')
+    ax.set_title('Bifacial gains')
+
+    plt.tight_layout()
+    return fig
+
+    
+def plot_pr():
+    print(':)')
     
 def plot_on_canvas(frame):
     # Remove any previous plot from the frame
@@ -198,7 +213,9 @@ def plot_on_canvas(frame):
         widget.destroy()
     
     # Get the figure from the plot_monthly function
-    fig = plot_monthly('kWh', 'Monthly Energy Data')
+    # fig = plot_monthly()
+    fig = plot_yield()
+    # fig = plot_bifacial_gains()
     
     # Get the Tkinter widget for the figure
     canvas = FigureCanvasTkAgg(fig, master=frame)
@@ -253,7 +270,6 @@ def calc_model():
 
     # create bifacial effective irradiance using aoi-corrected timeseries values
     irrad['effective_irradiance'] = (irrad['total_abs_front'] + (irrad['total_abs_back'] * bifaciality))
-
     # dc arrays
     array = pvsystem.Array(mount=sat_mount,
                             module_parameters = my_module,
@@ -269,8 +285,18 @@ def calc_model():
                                 albedo = albedo)
     
     mc_bifi = modelchain.ModelChain(system, site_location, aoi_model='no_loss')
+    
     mc_bifi.run_model_from_effective_irradiance(irrad)
-    results = pd.DataFrame(mc_bifi.results.ac)
+    results_bifacial = pd.DataFrame(mc_bifi.results.ac)
+    
+    irrad['effective_irradiance'] = irrad['total_abs_front']
+    mc_bifi.run_model_from_effective_irradiance(irrad)
+    results_non_bifacial = pd.DataFrame(mc_bifi.results.ac)
+    
+    results = pd.DataFrame(index = data.index)
+    results['bifacial'] = results_bifacial
+    results['non bifacial'] = results_non_bifacial
+
     return results
     
 if __name__ == "__main__":
