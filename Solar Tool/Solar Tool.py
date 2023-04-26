@@ -9,7 +9,7 @@ https://re.jrc.ec.europa.eu/pvg_tools/en/#TMY
 
 # Libraries
 
-import warnings
+import warnings, webbrowser, os, sys
 from pvlib import pvsystem, iotools, location, modelchain, ivtools
 from pvlib.temperature import TEMPERATURE_MODEL_PARAMETERS as PARAMS
 import tkinter as tk
@@ -17,9 +17,16 @@ from tkinter import filedialog
 from pvlib.bifacial.pvfactors import pvfactors_timeseries
 import pandas as pd
 import matplotlib.pyplot as plt
+import tkinter as tk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import numpy as np
+import matplotlib.image as img
 
 # supressing shapely warnings that occur on import of pvfactors
 warnings.filterwarnings(action='ignore', module='pvfactors')
+
+# IES ISI logo
+ISI_logo = os.getcwd() + '\IES_logo.jpg'
 
 # Global variables
 backtrack = True
@@ -36,6 +43,8 @@ strings = 4
 pannel_azimuth = 30
 pannel_tilt = 30
 
+type_options = ['Monthly Energy', 'Yield', 'Bifacial Gain', 'Performance Ratio']
+
 module = 'LONGi_Green_Energy_Technology_Co___Ltd__LR6_72BP_350M'
 inverter = 'ABB__PVI_10_0_I_OUTD_x_US_480_y_z__480V_'
 temp_model_parameters = PARAMS['sapm']['open_rack_glass_glass']
@@ -43,28 +52,59 @@ cec_modules = pvsystem.retrieve_sam('CECMod')
 cec_inverters = pvsystem.retrieve_sam('cecinverter')
 bifacial_modules = cec_modules.T[cec_modules.T['Bifacial'] == 1].T
 
-results = pd.DataFrame()
-
 def main():
     
     # Global variables and objects
-    global my_module, my_inverter, results, temp_model_parameters
+    global my_module, my_inverter
+       
+    # Create main window
+    root = tk.Tk()
+    root.title('main')
+    
+    opts_dict = {"type_plot": tk.StringVar(value = 'Monthly Energy')}
+    
+    # PVGIS TMY data website
+    url_button = tk.Button(root, text="PVGIS data web site", command=open_url)
+    url_button.pack()
     
     # Load meteorological data
-    load_data()
+    button_load_data = tk.Button(root, text='Load data', command=load_data)
+    button_load_data.pack()
     
     # Choose solar pannels and inverters, and the temperature models
     my_module = bifacial_modules[module]
     my_inverter = cec_inverters[inverter]
     
-    results = calc_model()
+    # Calculate model
+    button_calc_model = tk.Button(root, text = 'Calculate model', command = calc_model)
+    button_calc_model.pack()
     
-    # plot results
-    title = 'IES data'
-    plot_monthly('kWh', title)
-    plot_daily('2020-07-21')
+    # create a tkinter frame for the plot
+    plot_frame = tk.Frame(root)
+    plot_frame.pack()
+    
+    type_plot_label = tk.Label(root, text="Plot type:")
+    type_plot_label.pack()
+    type_plot = tk.OptionMenu(root, opts_dict["type_plot"], *type_options)
+    type_plot.pack()
+    
+    # call the modified function to get the Figure instance
+    plot_button = tk.Button(root, text = 'Plot', command = lambda: plot_on_canvas(canvas, opts_dict))
+    plot_button.pack()
+    
+    canvas = tk.Canvas(root, width=900, height=500)
+    canvas.pack_propagate(0)
+    canvas.pack()
 
+    # start the tkinter event loop
+    root.mainloop()
+
+####################################################################################################
+# Functions
+
+# Load data from .epw file
 def load_data():
+    
     global data, metadata, site_location, solar_position
     meteo_file = filedialog.askopenfilename()
     data, metadata = iotools.read_epw(meteo_file, coerce_year = 2020)
@@ -72,24 +112,24 @@ def load_data():
                                       longitude = metadata['longitude'])
 
     solar_position = site_location.get_solarposition(data.index)
+    return data, metadata, site_location, solar_position
 
-
-def plot_monthly(units, title):
+# Open TMY data URL    
+def open_url():
+    url = "https://re.jrc.ec.europa.eu/pvg_tools/en/#TMY"
+    webbrowser.open_new(url)
     
+# Plot energy data by months graph bar
+def plot_monthly():
+    
+    global fig
     df = pd.DataFrame(results)
     
     # Cut powers lower to zero
     df = df.clip(lower=0)
     
-    # Reshape with units parameter
-    if units == 'Wh':
-        df /= 1
-    
-    elif units == 'kWh':
-        df /= 1000
-        
-    elif units == 'MWh':
-        df /= 1000000
+    # Get energy into kWh
+    df /= 1000
     
     # Resample data into monthly energy produced
     array_monthly = df.resample('M').sum()
@@ -98,56 +138,120 @@ def plot_monthly(units, title):
     new_index = pd.Index([d.strftime('%Y-%m') for d in array_monthly.index])
     array_monthly.index = new_index
     
-    ax = array_monthly.plot(kind='bar', figsize=(10, 6))
-    
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    array_monthly['bifacial'].plot(kind='bar', ax=ax)
+
     # add the values to the top of each bar
     for i in ax.containers:
         ax.bar_label(i, label_type='edge')
-    
-    plt.ylabel('Energy [' + units + ']')
-    plt.title(title)
+
+    ax.set_ylabel('[kWh]')
+    ax.set_title('Monthly energy generated')
+
     plt.tight_layout()
+    return fig
 
-def plot_daily(day):
+def plot_yield():
+    global fig
     
-    global df_merged
+    pp = my_module['STC'] * modules_per_string * strings
+    df = pd.DataFrame(results)
     
-    df_meteo = pd.DataFrame(data.loc[day])
-    df_day = pd.DataFrame(results.loc[day])
-    df_day = df_day.clip(lower=0)
+    # Cut powers lower to zero
+    df = df.clip(lower=0)
     
-    df_merged = pd.merge(df_day, df_meteo[['dhi', 'dni']], left_index=True, right_index=True)
-    df_merged = df_merged.rename(columns = {0: 'Power'})
-    df_merged = df_merged[df_merged['Power'] > 0]
-    # Plot data
-    fig, ax1 = plt.subplots(figsize = (10, 6))
+    # Get energy per peak power
+    df /= pp
+    
+    # Resample data into monthly energy produced
+    array_monthly = df.resample('M').sum()
+    
+    # Reshape the dataframe 
+    new_index = pd.Index([d.strftime('%Y-%m') for d in array_monthly.index])
+    array_monthly.index = new_index
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    array_monthly['bifacial'].plot(kind='bar', ax=ax)
 
-    # create second axis
-    ax2 = ax1.twinx()
-    
-    # plot df_day on the left axis
-    ax1.plot(df_merged.index, df_merged['Power'], color='blue', label='Power')
-    
-    # plot df_meteo on the right axis
-    ax2.plot(df_merged.index, df_merged['dhi'], color='red', label='dhi')
-    ax2.plot(df_merged.index, df_merged['dni'] , color='green', label='dni')
-    
-    # Make the axis better
-    
-    # set axis labels
-    ax1.set_xlabel(day)
-    ax1.set_ylabel('kWh')
-    ax2.set_ylabel('W/m$^2$')
-    
-    # add legend
-    ax1.legend(loc='upper left')
-    ax2.legend(loc='upper right')
+    # add the values to the top of each bar
+    for i in ax.containers:
+        ax.bar_label(i, label_type='edge')
 
-    # show the plot
+    ax.set_ylabel('[kWh/kWp]')
+    ax.set_title('Yield ratio')
+
     plt.tight_layout()
-    plt.show()
+    return fig
+
+def plot_bifacial_gains():
+    
+    global fig
+    
+    df = pd.DataFrame(results)
+    
+    # Cut powers lower to zero
+    df = df.clip(lower=0)
+    
+    # Resample data into monthly energy produced
+    array_monthly = df.resample('M').sum()
+    bif_gains = 100 * (array_monthly['bifacial'] - array_monthly['non bifacial']) / array_monthly['bifacial']
+    
+    # Reshape the dataframe 
+    new_index = pd.Index([d.strftime('%Y-%m') for d in array_monthly.index])
+    bif_gains.index = new_index
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    bif_gains.plot(kind='bar', ax=ax)
+
+    # add the values to the top of each bar
+    for i in ax.containers:
+        ax.bar_label(i, label_type='edge')
+
+
+    ax.set_ylabel('[%]')
+    ax.set_title('Bifacial gains')
+
+    plt.tight_layout()
+    return fig
+
+    
+def plot_pr():
+    print(':)')
+    
+def plot_on_canvas(frame, opts_dict):
+    
+    fig = plt.Figure()
+    
+    # Remove any previous plot from the frame
+    for widget in frame.winfo_children():
+        widget.destroy()
+    
+    # Get the figure from the plot_monthly function
+    if (opts_dict['type_plot'].get() == 'Monthly Energy'):
+        fig = plot_monthly()
+        
+    elif (opts_dict['type_plot'].get() == 'Yield'):        
+        fig = plot_yield()
+        
+    elif (opts_dict['type_plot'].get() == 'Bifacial Gain'): 
+        fig = plot_bifacial_gains()
+    
+    # Get the Tkinter widget for the figure
+    canvas = FigureCanvasTkAgg(fig, master=frame)
+    canvas_widget = canvas.get_tk_widget()
+    
+    # Pack the canvas widget inside the frame
+    canvas_widget.pack(side="top", fill="both", expand=True)
+    
+    # Set the row and column of the frame to expand with window size changes
+    frame.grid_rowconfigure(0, weight=1)
+    frame.grid_columnconfigure(0, weight=1)
     
 def calc_model():
+    
+    global results
+    
     if backtrack == True:
         sat_mount = pvsystem.SingleAxisTrackerMount(axis_tilt=axis_tilt,
                                                 axis_azimuth=axis_azimuth,
@@ -167,43 +271,52 @@ def calc_model():
 
     # get bifacial irradiance
     irrad = pvfactors_timeseries(solar_position['azimuth'],
-                                 solar_position['apparent_zenith'],
-                                 orientation['surface_azimuth'],
-                                 orientation['surface_tilt'],
-                                 axis_azimuth,
-                                 data.index,
-                                 data['dni'],
-                                 data['dhi'],
-                                 gcr,
-                                 pvrow_height,
-                                 pvrow_width,
-                                 albedo,
-                                 n_pvrows=3,
-                                 index_observed_pvrow=1
-                                 )
+                                  solar_position['apparent_zenith'],
+                                  orientation['surface_azimuth'],
+                                  orientation['surface_tilt'],
+                                  axis_azimuth,
+                                  data.index,
+                                  data['dni'],
+                                  data['dhi'],
+                                  gcr,
+                                  pvrow_height,
+                                  pvrow_width,
+                                  albedo,
+                                  n_pvrows=3,
+                                  index_observed_pvrow=1
+                                  )
 
     irrad = pd.concat(irrad, axis = 1)
 
     # create bifacial effective irradiance using aoi-corrected timeseries values
     irrad['effective_irradiance'] = (irrad['total_abs_front'] + (irrad['total_abs_back'] * bifaciality))
-
     # dc arrays
     array = pvsystem.Array(mount=sat_mount,
-                           module_parameters = my_module,
-                           temperature_model_parameters = temp_model_parameters,
-                           modules_per_string = modules_per_string,
-                           strings = strings)
+                            module_parameters = my_module,
+                            temperature_model_parameters = temp_model_parameters,
+                            modules_per_string = modules_per_string,
+                            strings = strings)
     
     # create system object
     system = pvsystem.PVSystem(arrays = [array],
-                               inverter_parameters = my_inverter,
-                               modules_per_string = modules_per_string,
-                               strings_per_inverter = strings,
-                               albedo = albedo)
+                                inverter_parameters = my_inverter,
+                                modules_per_string = modules_per_string,
+                                strings_per_inverter = strings,
+                                albedo = albedo)
     
     mc_bifi = modelchain.ModelChain(system, site_location, aoi_model='no_loss')
+    
     mc_bifi.run_model_from_effective_irradiance(irrad)
-    results = pd.DataFrame(mc_bifi.results.ac)
+    results_bifacial = pd.DataFrame(mc_bifi.results.ac)
+    
+    irrad['effective_irradiance'] = irrad['total_abs_front']
+    mc_bifi.run_model_from_effective_irradiance(irrad)
+    results_non_bifacial = pd.DataFrame(mc_bifi.results.ac)
+    
+    results = pd.DataFrame(index = data.index)
+    results['bifacial'] = results_bifacial
+    results['non bifacial'] = results_non_bifacial
+
     return results
     
 if __name__ == "__main__":
