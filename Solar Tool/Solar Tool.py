@@ -210,14 +210,41 @@ def plot_bifacial_gains():
 
 
     ax.set_ylabel('[%]')
-    ax.set_title('Bifacial gains')
+    ax.set_title('Bifacial gain')
 
     plt.tight_layout()
     return fig
 
     
 def plot_pr():
-    print(':)')
+    global fig
+    
+    df = pd.DataFrame(results)
+    
+    # Cut powers lower to zero
+    df = df.clip(lower=0)
+    
+    # Resample data into monthly energy produced
+    array_monthly = df.resample('M').sum()
+    pr = (array_monthly['bifacial'] / array_monthly['dc']) * 100
+    
+    # Reshape the dataframe 
+    new_index = pd.Index([d.strftime('%Y-%m') for d in array_monthly.index])
+    pr.index = new_index
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    pr.plot(kind='bar', ax=ax)
+
+    # add the values to the top of each bar
+    for i in ax.containers:
+        ax.bar_label(i, label_type='edge')
+
+
+    ax.set_ylabel('[%]')
+    ax.set_title('Performance Ratio')
+
+    plt.tight_layout()
+    return fig
     
 def plot_on_canvas(frame, opts_dict):
     
@@ -236,6 +263,9 @@ def plot_on_canvas(frame, opts_dict):
         
     elif (opts_dict['type_plot'].get() == 'Bifacial Gain'): 
         fig = plot_bifacial_gains()
+        
+    elif (opts_dict['type_plot'].get() == 'Performance Ratio'): 
+        fig = plot_pr()
     
     # Get the Tkinter widget for the figure
     canvas = FigureCanvasTkAgg(fig, master=frame)
@@ -250,7 +280,7 @@ def plot_on_canvas(frame, opts_dict):
     
 def calc_model():
     
-    global results
+    global results, system, losses, mc_bifi
     
     if backtrack == True:
         sat_mount = pvsystem.SingleAxisTrackerMount(axis_tilt=axis_tilt,
@@ -282,8 +312,8 @@ def calc_model():
                                   pvrow_height,
                                   pvrow_width,
                                   albedo,
-                                  n_pvrows=3,
-                                  index_observed_pvrow=1
+                                  n_pvrows=5,
+                                  index_observed_pvrow=2
                                   )
 
     irrad = pd.concat(irrad, axis = 1)
@@ -306,16 +336,24 @@ def calc_model():
     
     mc_bifi = modelchain.ModelChain(system, site_location, aoi_model='no_loss')
     
+    # Run model with bifacial gains
     mc_bifi.run_model_from_effective_irradiance(irrad)
     results_bifacial = pd.DataFrame(mc_bifi.results.ac)
     
+    # Calculate Performance ratio
+    
+    losses = pd.DataFrame(irrad['effective_irradiance'] * my_module['A_c']) * modules_per_string * strings
+    
+    # Run model without bifacial gains
     irrad['effective_irradiance'] = irrad['total_abs_front']
     mc_bifi.run_model_from_effective_irradiance(irrad)
     results_non_bifacial = pd.DataFrame(mc_bifi.results.ac)
     
+    # Create results dataframe
     results = pd.DataFrame(index = data.index)
     results['bifacial'] = results_bifacial
     results['non bifacial'] = results_non_bifacial
+    results['dc'] = losses
 
     return results
     
