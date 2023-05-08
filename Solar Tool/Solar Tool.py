@@ -52,70 +52,81 @@ bifacial_modules = cec_modules.T[cec_modules.T['Bifacial'] == 1].T
 
 my_module = bifacial_modules[module]
 my_inverter = cec_inverters[inverter]
+latitude = 40.453201 
+longitude = -3.726968
+
+
 
 def main():
     
     # Global variables and objects
-    global my_module, my_inverter, opts_dict
+    global my_module, opts_dict, my_inverter, location_dict
        
     # Create main window
+    
     root = tk.Tk()
     root.title('main')
     
+    # Dictionaries for changing variables
     opts_dict = {"type_plot": tk.StringVar(value = 'Monthly Energy'),
                  "module": tk.StringVar(value = module),
                  "inverter": tk.StringVar(value = inverter),
-                 "tracking": tk.StringVar(value = 'Backtrack')}
+                 "tracking": tk.StringVar(value = 'Backtrack'),
+                 'latitude': tk.DoubleVar(value = latitude),
+                 'longitude': tk.DoubleVar(value = longitude)}
+    
+    
+    # TopLevel for the columns
+    options_window = tk.Frame(root, width = 300, height = 200)
+    plot_window = tk.Frame(root, width = 300, height = 200)
+    # var_window = tk.TopLevel(root)
+    
+    
     
     # PVGIS TMY data website
-    url_label = tk.Label(root, text="1. Access PVIS data web site to gather .epw file data of location:")
+    url_label = tk.Label(options_window, text="Latitude and longitude:")
     url_label.pack()
-    url_button = tk.Button(root, text="PVGIS data web site", command=open_url)
-    url_button.pack()
-    
-    # Load meteorological data
-    url_load_data = tk.Label(root, text="2. Load .epw file containing TMY data from desired location:")
-    url_load_data.pack()
-    button_load_data = tk.Button(root, text='Load data', command=load_data)
-    button_load_data.pack()
     
     # Choose options
-    module_label = tk.Label(root, text="Module selector:")
+    module_label = tk.Label(options_window, text="Module selector:")
     module_label.pack()
-    module_selector = tk.OptionMenu(root, opts_dict["module"], *bifacial_modules)
+    module_selector = tk.OptionMenu(options_window, opts_dict["module"], *bifacial_modules)
     module_selector.pack()
     
-    inverter_label = tk.Label(root, text="Inverter selector:")
+    inverter_label = tk.Label(options_window, text="Inverter selector:")
     inverter_label.pack()
-    inverter_label = tk.OptionMenu(root, opts_dict["inverter"], *cec_inverters)
+    inverter_label = tk.OptionMenu(options_window, opts_dict["inverter"], *cec_inverters)
     inverter_label.pack()
     
-    tracking_label = tk.OptionMenu(root, opts_dict["tracking"], *track_options)
-    tracking_label.pack()
+    inverter_label = tk.Label(options_window, text="Tracking options:")
+    inverter_label.pack()
+    tracking_selector = tk.OptionMenu(options_window, opts_dict["tracking"], *track_options)
+    tracking_selector.pack()
     
     # Calculate model
-    button_calc_model = tk.Button(root, text = 'Calculate model', command = calc_model)
+    calc_label = tk.Label(options_window, text="Calculate model:")
+    calc_label.pack()
+    button_calc_model = tk.Button(options_window, text = 'Calculate', command = calc_model)
     button_calc_model.pack()
     
-    # create a tkinter frame for the plot
-    plot_frame = tk.Frame(root)
-    plot_frame.pack()
-    
     # Label to select type of plot
-    type_plot_label = tk.Label(root, text="Plot type:")
+    type_plot_label = tk.Label(plot_window, text="Plot type:")
     type_plot_label.pack()
-    type_plot = tk.OptionMenu(root, opts_dict["type_plot"], *type_options)
+    type_plot = tk.OptionMenu(plot_window, opts_dict["type_plot"], *type_options)
     type_plot.pack()
     
     # call the modified function to get the Figure instance
-    plot_button = tk.Button(root, text = 'Plot', command = lambda: plot_on_canvas(canvas, opts_dict))
+    plot_button = tk.Button(plot_window, text = 'Plot', command = lambda: plot_on_canvas(canvas, opts_dict))
     plot_button.pack()
     
-    canvas = tk.Canvas(root, width=900, height=500)
+    # Plot Canvas
+    canvas = tk.Canvas(plot_window, width=900, height=500)
     canvas.pack_propagate(0)
     canvas.pack()
-
-    # start the tkinter event loop
+    
+    # Place main Frame and run mainloop
+    options_window.grid(row = 0, column = 0, sticky = 'w')
+    plot_window.grid(row = 0, column = 1)
     root.mainloop()
 
 ####################################################################################################
@@ -303,6 +314,25 @@ def plot_on_canvas(frame, opts_dict):
 def calc_model():
     
     global results, total_results
+    
+    global data, months_selected, inputs, metadata 
+    data, months_selected, inputs, metadata = iotools.get_pvgis_tmy(opts_dict['latitude'].get(), 
+                                                                    opts_dict['longitude'].get(),
+                                                                    map_variables=True)
+    
+    # get the latest year in the index
+    latest_year = max(data.index.year)
+    
+    # create a new index with the latest year
+    new_index = data.index.map(lambda x: x.replace(year=latest_year))
+    
+    # set the new index on the dataframe
+    data = data.set_index(new_index)
+    
+    site_location = location.Location(latitude = opts_dict['latitude'].get(),
+                                      longitude = opts_dict['longitude'].get())
+
+    solar_position = site_location.get_solarposition(data.index)
     
     # Update parameters
     my_module = bifacial_modules[opts_dict['module'].get()]
