@@ -22,11 +22,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 # supressing shapely warnings that occur on import of pvfactors
 warnings.filterwarnings(action='ignore', module='pvfactors')
 
-# IES ISI logo
-ISI_logo = os.getcwd() + '\IES_logo.jpg'
-
 # Global variables
-backtrack = True
 axis_tilt = 0
 axis_azimuth = 180
 max_angle = 60
