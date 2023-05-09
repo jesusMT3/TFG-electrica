@@ -29,15 +29,12 @@ ISI_logo = os.getcwd() + '\IES_logo.jpg'
 backtrack = True
 axis_tilt = 0
 axis_azimuth = 180
-gcr = 0.35
 max_angle = 60
 pvrow_height = 3
 pvrow_width = 4
 albedo = 0.2
 bifaciality = 0.75
-modules_per_string = 10
-strings = 4
-pannel_azimuth = 30
+pannel_azimuth = 180
 pannel_tilt = 30
 
 type_options = ['Monthly Energy', 'Yield', 'Bifacial Gain', 'Performance Ratio']
@@ -52,10 +49,6 @@ bifacial_modules = cec_modules.T[cec_modules.T['Bifacial'] == 1].T
 
 my_module = bifacial_modules[module]
 my_inverter = cec_inverters[inverter]
-latitude = 40.453201 
-longitude = -3.726968
-
-
 
 def main():
     
@@ -65,27 +58,37 @@ def main():
     # Create main window
     
     root = tk.Tk()
-    root.title('main')
+    root.title('Bifacial Tool')
     
     # Dictionaries for changing variables
     opts_dict = {"type_plot": tk.StringVar(value = 'Monthly Energy'),
                  "module": tk.StringVar(value = module),
                  "inverter": tk.StringVar(value = inverter),
                  "tracking": tk.StringVar(value = 'Backtrack'),
-                 'latitude': tk.DoubleVar(value = latitude),
-                 'longitude': tk.DoubleVar(value = longitude)}
-    
+                 'latitude': tk.DoubleVar(value = 40.45),
+                 'longitude': tk.DoubleVar(value = -3.73),
+                 'modules_per_string': tk.IntVar(value = 4),
+                 'strings': tk.IntVar(value = 4),
+                 'gcr': tk.DoubleVar(value = 0.27)}
     
     # TopLevel for the columns
-    options_window = tk.Frame(root, width = 300, height = 200)
-    plot_window = tk.Frame(root, width = 300, height = 200)
-    # var_window = tk.TopLevel(root)
+    options_window = tk.Frame(root)
+    plot_window = tk.Frame(root)
+    var_window = tk.Frame(root)
     
-    
-    
-    # PVGIS TMY data website
-    url_label = tk.Label(options_window, text="Latitude and longitude:")
-    url_label.pack()
+    # Options
+    # Latitude and longitude settings
+    lat_label = tk.Label(options_window, text="Set latitude:")
+    lat_label.pack()
+    lat_entry = tk.Entry(options_window, textvariable=opts_dict['latitude'])
+    lat_entry.pack()
+    lat_entry.bind("<FocusOut>", lambda event: opts_dict['latitude'].set(float(lat_entry.get())))
+
+    lon_label = tk.Label(options_window, text="Set longitude")
+    lon_label.pack()
+    lon_entry = tk.Entry(options_window, textvariable=opts_dict['longitude'])
+    lon_entry.pack()
+    lon_entry.bind("<FocusOut>", lambda event: opts_dict['longitude'].set(float(lon_entry.get())))
     
     # Choose options
     module_label = tk.Label(options_window, text="Module selector:")
@@ -109,6 +112,7 @@ def main():
     button_calc_model = tk.Button(options_window, text = 'Calculate', command = calc_model)
     button_calc_model.pack()
     
+    # Plot
     # Label to select type of plot
     type_plot_label = tk.Label(plot_window, text="Plot type:")
     type_plot_label.pack()
@@ -124,9 +128,35 @@ def main():
     canvas.pack_propagate(0)
     canvas.pack()
     
+    # Save results button
+    save_button = tk.Button(plot_window, text = 'Save results', command = save_results)
+    save_button.pack()
+    
+    # Variables
+    # modules per string and strings
+    mods_label = tk.Label(var_window, text="Modules per string:")
+    mods_label.pack()
+    mods_entry = tk.Entry(var_window, textvariable=opts_dict['modules_per_string'])
+    mods_entry.pack()
+    mods_entry.bind("<FocusOut>", lambda event: opts_dict['modules_per_string'].set(int(mods_entry.get())))
+    
+    strings_label = tk.Label(var_window, text="Strings:")
+    strings_label.pack()
+    strings_entry = tk.Entry(var_window, textvariable=opts_dict['strings'])
+    strings_entry.pack()
+    strings_entry.bind("<FocusOut>", lambda event: opts_dict['strings'].set(int(strings_entry.get())))
+    
+    # Set GCR
+    gcr_label = tk.Label(var_window, text="Ground to Coverage Ratio:")
+    gcr_label.pack()
+    gcr_entry = tk.Entry(var_window, textvariable=opts_dict['gcr'])
+    gcr_entry.pack()
+    gcr_entry.bind("<FocusOut>", lambda event: opts_dict['gcr'].set(int(gcr_entry.get())))
+    
     # Place main Frame and run mainloop
-    options_window.grid(row = 0, column = 0, sticky = 'w')
+    options_window.grid(row = 0, column = 0)
     plot_window.grid(row = 0, column = 1)
+    var_window.grid(row = 0, column = 2)
     root.mainloop()
 
 ####################################################################################################
@@ -172,6 +202,10 @@ def plot_monthly():
     fig, ax = plt.subplots(figsize=(10, 6))
 
     array_monthly['bifacial'].plot(kind='bar', ax=ax)
+    
+    total = total_results['Energy'].values[0]
+    text = f'Total: {total:.2f} MWh'
+    plt.text(0, 0, text, fontsize = 12, bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5'))
 
     # add the values to the top of each bar
     for i in ax.containers:
@@ -180,11 +214,14 @@ def plot_monthly():
     ax.set_ylabel('[kWh]')
     ax.set_title('Monthly energy generated')
 
-    plt.tight_layout()
+    # plt.tight_layout()
     return fig
 
 def plot_yield():
     global fig
+    
+    modules_per_string = opts_dict['modules_per_string'].get()
+    strings = opts_dict['strings'].get()
     
     pp = my_module['STC'] * modules_per_string * strings
     df = pd.DataFrame(results)
@@ -202,8 +239,14 @@ def plot_yield():
     new_index = pd.Index([d.strftime('%Y-%m') for d in array_monthly.index])
     array_monthly.index = new_index
     
+    # Plot
     fig, ax = plt.subplots(figsize=(10, 6))
     array_monthly['bifacial'].plot(kind='bar', ax=ax)
+    
+    # Print total
+    total = total_results['Yield'].values[0]
+    text = f'Total: {total:.2f} h'
+    plt.text(0, 0, text, fontsize = 12, bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5'))
 
     # add the values to the top of each bar
     for i in ax.containers:
@@ -212,7 +255,7 @@ def plot_yield():
     ax.set_ylabel('[kWh/kWp]')
     ax.set_title('Yield ratio')
 
-    plt.tight_layout()
+    # plt.tight_layout()
     return fig
 
 def plot_bifacial_gains():
@@ -232,8 +275,14 @@ def plot_bifacial_gains():
     new_index = pd.Index([d.strftime('%Y-%m') for d in array_monthly.index])
     bif_gains.index = new_index
     
+    # Plot
     fig, ax = plt.subplots(figsize=(10, 6))
     bif_gains.plot(kind='bar', ax=ax)
+    
+    # Print total
+    total = total_results['Bifacial gains'].values[0]
+    text = f'Total: {total:.2f} %'
+    plt.text(0, 0, text, fontsize = 12, bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5'))
 
     # add the values to the top of each bar
     for i in ax.containers:
@@ -243,13 +292,16 @@ def plot_bifacial_gains():
     ax.set_ylabel('[%]')
     ax.set_title('Bifacial gains')
 
-    plt.tight_layout()
+    # plt.tight_layout()
     return fig
 
     
 def plot_pr():
     global fig
     pr = pd.DataFrame({})
+    
+    modules_per_string = opts_dict['modules_per_string'].get()
+    strings = opts_dict['strings'].get()
     
     df = pd.DataFrame(results)
     
@@ -265,9 +317,15 @@ def plot_pr():
     new_index = pd.Index([d.strftime('%Y-%m') for d in array_monthly.index])
     pr.index = new_index
     
+    # Plot
     fig, ax = plt.subplots(figsize=(10, 6))
     pr.plot(kind='bar', ax=ax)
 
+    # Print total
+    total = total_results['PR'].values[0]
+    text = f'Total: {total:.2f} pu'
+    plt.text(0, 0, text, fontsize = 12, bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5'))
+    
     # add the values to the top of each bar
     for i in ax.containers:
         ax.bar_label(i, label_type='edge')
@@ -276,7 +334,7 @@ def plot_pr():
     ax.set_ylabel('[%]')
     ax.set_title('Performance Ratio')
 
-    plt.tight_layout()
+    # plt.tight_layout()
     return fig
     
 def plot_on_canvas(frame, opts_dict):
@@ -314,6 +372,10 @@ def plot_on_canvas(frame, opts_dict):
 def calc_model():
     
     global results, total_results
+    
+    modules_per_string = opts_dict['modules_per_string'].get()
+    strings = opts_dict['strings'].get()
+    gcr = opts_dict['gcr'].get()
     
     global data, months_selected, inputs, metadata 
     data, months_selected, inputs, metadata = iotools.get_pvgis_tmy(opts_dict['latitude'].get(), 
@@ -430,6 +492,16 @@ def calc_model():
     total_results['PR'] = (results_bifacial.sum() / irrad['effective_irradiance'].sum()) / (dc_power / 1000)
     
     return results
+
+# Save total results
+def save_results():
+    df_results = pd.DataFrame({})
+    df_results = total_results.T
+    df_results = df_results.rename(columns = {0: 'Value'})
+    df_results['units'] = ('MWh', 'h', '%', 'pu')
+    
+    file_path = filedialog.asksaveasfilename(defaultextension='.csv')
+    df_results.to_csv(file_path, index = True)
     
 if __name__ == "__main__":
     main()
