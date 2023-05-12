@@ -30,11 +30,9 @@ pvrow_height = 3
 pvrow_width = 4
 albedo = 0.2
 bifaciality = 0.75
-pannel_azimuth = 180
-pannel_tilt = 30
 
 type_options = ['Monthly Energy', 'Yield', 'Bifacial Gain', 'Performance Ratio']
-track_options = ['Track', 'Backtrack', 'None']
+track_options = ['Track', 'Backtrack', 'Normalized', 'Mannual']
 
 module = 'LONGi_Green_Energy_Technology_Co___Ltd__LR6_72BP_350M'
 inverter = 'ABB__PVI_10_0_I_OUTD_x_US_480_y_z__480V_'
@@ -65,48 +63,107 @@ def main():
                  'longitude': tk.DoubleVar(value = -3.73),
                  'modules_per_string': tk.IntVar(value = 4),
                  'strings': tk.IntVar(value = 4),
-                 'gcr': tk.DoubleVar(value = 0.27)}
+                 'gcr': tk.DoubleVar(value = 0.27),
+                 'pannel_azimuth': tk.DoubleVar(value = 180),
+                 'pannel_tilt': tk.DoubleVar(value = 30)}
     
     # TopLevel for the columns
     options_window = tk.Frame(root)
     plot_window = tk.Frame(root)
-    var_window = tk.Frame(root)
     
     # Options
     # Latitude and longitude settings
-    lat_label = tk.Label(options_window, text="Set latitude:")
-    lat_label.pack()
-    lat_entry = tk.Entry(options_window, textvariable=opts_dict['latitude'])
-    lat_entry.pack()
+    lat_lon = tk.Frame(options_window, border = 50)
+    
+    lat_label = tk.Label(lat_lon, text="Set latitude:")
+    lat_label.grid(row = 0, column = 0)
+    lat_entry = tk.Entry(lat_lon, textvariable=opts_dict['latitude'])
+    lat_entry.grid(row = 0, column = 1)
     lat_entry.bind("<FocusOut>", lambda event: opts_dict['latitude'].set(float(lat_entry.get())))
 
-    lon_label = tk.Label(options_window, text="Set longitude")
-    lon_label.pack()
-    lon_entry = tk.Entry(options_window, textvariable=opts_dict['longitude'])
-    lon_entry.pack()
+    lon_label = tk.Label(lat_lon, text="Set longitude")
+    lon_label.grid(row = 1, column = 0)
+    lon_entry = tk.Entry(lat_lon, textvariable=opts_dict['longitude'])
+    lon_entry.grid(row = 1, column = 1)
     lon_entry.bind("<FocusOut>", lambda event: opts_dict['longitude'].set(float(lon_entry.get())))
     
+    lat_lon.pack()
+    
     # Choose options
-    module_label = tk.Label(options_window, text="Module selector:")
+    mod_inv = tk.Frame(options_window, border = 50)
+    
+    module_label = tk.Label(mod_inv, text="Module selector:")
     module_label.pack()
-    module_selector = tk.OptionMenu(options_window, opts_dict["module"], *bifacial_modules)
+    module_selector = tk.OptionMenu(mod_inv, opts_dict["module"], *bifacial_modules)
     module_selector.pack()
     
-    inverter_label = tk.Label(options_window, text="Inverter selector:")
+    inverter_label = tk.Label(mod_inv, text="Inverter selector:")
     inverter_label.pack()
-    inverter_label = tk.OptionMenu(options_window, opts_dict["inverter"], *cec_inverters)
+    inverter_label = tk.OptionMenu(mod_inv, opts_dict["inverter"], *cec_inverters)
     inverter_label.pack()
     
-    inverter_label = tk.Label(options_window, text="Tracking options:")
-    inverter_label.pack()
-    tracking_selector = tk.OptionMenu(options_window, opts_dict["tracking"], *track_options)
-    tracking_selector.pack()
+    mod_inv.pack()
+    
+    track_opts = tk.Frame(options_window)
+    
+    track_label = tk.Label(track_opts, text="Module selector:")
+    track_label.grid(row = 0, column = 0)
+    track_selector = tk.OptionMenu(track_opts, opts_dict["tracking"], *track_options)
+    track_selector.grid(row = 0, column = 1)
+    
+    track_opts.pack()
+    
+    
+    #Pannel azimuth and tilt
+    az_tilt = tk.Frame(options_window, border = 50)
+
+    azimuth_label = tk.Label(az_tilt, text="Pannel azimuth:")
+    azimuth_label.grid(row = 0, column = 0)
+    azimuth_entry = tk.Entry(az_tilt, textvariable=opts_dict['pannel_azimuth'])
+    azimuth_entry.grid(row = 0, column = 1)
+    azimuth_entry.bind("<FocusOut>", lambda event: opts_dict['pannel_azimuth'].set(float(azimuth_entry.get())))
+    
+    tilt_label = tk.Label(az_tilt, text="Pannel tilt:")
+    tilt_label.grid(row = 1, column = 0)
+    tilt_entry = tk.Entry(az_tilt, textvariable=opts_dict['pannel_tilt'])
+    tilt_entry.grid(row = 1, column = 1)
+    tilt_entry.bind("<FocusOut>", lambda event: opts_dict['pannel_tilt'].set(float(tilt_entry.get())))
+    
+    az_tilt.pack()
+    
+    # modules per string and strings
+    rows_strings = tk.Frame(options_window)
+    
+    mods_label = tk.Label(rows_strings, text="Modules per string:")
+    mods_label.grid(row = 0, column = 0)
+    mods_entry = tk.Entry(rows_strings, textvariable=opts_dict['modules_per_string'])
+    mods_entry.grid(row = 0, column = 1)
+    mods_entry.bind("<FocusOut>", lambda event: opts_dict['modules_per_string'].set(int(mods_entry.get())))
+    
+    strings_label = tk.Label(rows_strings, text="Strings:")
+    strings_label.grid(row = 1, column = 0)
+    strings_entry = tk.Entry(rows_strings, textvariable=opts_dict['strings'])
+    strings_entry.grid(row = 1, column = 1)
+    strings_entry.bind("<FocusOut>", lambda event: opts_dict['strings'].set(int(strings_entry.get())))
+    
+    rows_strings.pack()
+    
+    # Set GCR
+    gcr_label = tk.Label(rows_strings, text="GCR:")
+    gcr_label.grid(row = 2, column = 0)
+    gcr_entry = tk.Entry(rows_strings, textvariable=opts_dict['gcr'])
+    gcr_entry.grid(row = 2, column = 1)
+    gcr_entry.bind("<FocusOut>", lambda event: opts_dict['gcr'].set(float(gcr_entry.get())))
     
     # Calculate model
-    calc_label = tk.Label(options_window, text="Calculate model:")
+    calc_frame = tk.Frame(options_window, border = 50)
+    
+    calc_label = tk.Label(calc_frame, text="Calculate model:")
     calc_label.pack()
-    button_calc_model = tk.Button(options_window, text = 'Calculate', command = calc_model)
+    button_calc_model = tk.Button(calc_frame, text = 'Calculate', command = calc_model)
     button_calc_model.pack()
+    
+    calc_frame.pack()
     
     # Plot
     # Label to select type of plot
@@ -129,30 +186,11 @@ def main():
     save_button.pack()
     
     # Variables
-    # modules per string and strings
-    mods_label = tk.Label(var_window, text="Modules per string:")
-    mods_label.pack()
-    mods_entry = tk.Entry(var_window, textvariable=opts_dict['modules_per_string'])
-    mods_entry.pack()
-    mods_entry.bind("<FocusOut>", lambda event: opts_dict['modules_per_string'].set(int(mods_entry.get())))
     
-    strings_label = tk.Label(var_window, text="Strings:")
-    strings_label.pack()
-    strings_entry = tk.Entry(var_window, textvariable=opts_dict['strings'])
-    strings_entry.pack()
-    strings_entry.bind("<FocusOut>", lambda event: opts_dict['strings'].set(int(strings_entry.get())))
-    
-    # Set GCR
-    gcr_label = tk.Label(var_window, text="Ground to Coverage Ratio:")
-    gcr_label.pack()
-    gcr_entry = tk.Entry(var_window, textvariable=opts_dict['gcr'])
-    gcr_entry.pack()
-    gcr_entry.bind("<FocusOut>", lambda event: opts_dict['gcr'].set(int(gcr_entry.get())))
     
     # Place main Frame and run mainloop
     options_window.grid(row = 0, column = 0)
     plot_window.grid(row = 0, column = 1)
-    var_window.grid(row = 0, column = 2)
     root.mainloop()
 
 ####################################################################################################
@@ -396,6 +434,8 @@ def calc_model():
     my_module = bifacial_modules[opts_dict['module'].get()]
     my_inverter = cec_inverters[opts_dict['inverter'].get()]
     track = opts_dict['tracking'].get()
+    pannel_azimuth = opts_dict['pannel_azimuth'].get()
+    pannel_tilt = opts_dict['pannel_tilt'].get()
     
     results = pd.DataFrame({})
     total_results = pd.DataFrame({})
@@ -406,10 +446,6 @@ def calc_model():
                                                 max_angle=max_angle,
                                                 backtrack=True,
                                                 gcr=gcr)
-    
-        # created for use in pvfactors timeseries
-        orientation = sat_mount.get_orientation(solar_position['apparent_zenith'],
-                                            solar_position['azimuth'])
         
     elif track == 'Track':
         sat_mount = pvsystem.SingleAxisTrackerMount(axis_tilt=axis_tilt,
@@ -417,17 +453,17 @@ def calc_model():
                                                 max_angle=max_angle,
                                                 backtrack=False,
                                                 gcr=gcr)
-    
-        # created for use in pvfactors timeseries
-        orientation = sat_mount.get_orientation(solar_position['apparent_zenith'],
-                                            solar_position['azimuth'])
-        
-    elif track == 'None':
+           
+    elif track == 'Normalized':
         sat_mount = pvsystem.FixedMount(surface_tilt = pannel_tilt,
                                         surface_azimuth = pannel_azimuth)
         
-        orientation = sat_mount.get_orientation(solar_position['apparent_zenith'],
-                                            solar_position['azimuth'])
+    elif track == 'Mannual':
+        sat_mount = pvsystem.FixedMount(surface_tilt = pannel_tilt,
+                                        surface_azimuth = pannel_azimuth)
+        
+    orientation = sat_mount.get_orientation(solar_position['apparent_zenith'],
+                                        solar_position['azimuth'])
 
     # get bifacial irradiance
     irrad = pvfactors_timeseries(solar_position['azimuth'],
