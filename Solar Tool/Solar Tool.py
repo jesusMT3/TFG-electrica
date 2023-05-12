@@ -32,7 +32,7 @@ albedo = 0.2
 bifaciality = 0.75
 
 type_options = ['Monthly Energy', 'Yield', 'Bifacial Gain', 'Performance Ratio']
-track_options = ['Track', 'Backtrack', 'Normalized', 'Mannual']
+track_options = ['Track', 'Backtrack', 'Fixed tilt']
 
 module = 'LONGi_Green_Energy_Technology_Co___Ltd__LR6_72BP_350M'
 inverter = 'ABB__PVI_10_0_I_OUTD_x_US_480_y_z__480V_'
@@ -159,34 +159,35 @@ def main():
     calc_frame = tk.Frame(options_window, border = 50)
     
     calc_label = tk.Label(calc_frame, text="Calculate model:")
-    calc_label.pack()
+    calc_label.grid(row = 0, column = 0)
     button_calc_model = tk.Button(calc_frame, text = 'Calculate', command = calc_model)
-    button_calc_model.pack()
+    button_calc_model.grid(row = 0, column = 1)
     
     calc_frame.pack()
     
     # Plot
     # Label to select type of plot
-    type_plot_label = tk.Label(plot_window, text="Plot type:")
-    type_plot_label.pack()
-    type_plot = tk.OptionMenu(plot_window, opts_dict["type_plot"], *type_options)
-    type_plot.pack()
+    plottings = tk.Frame(plot_window)
+    
+    type_plot_label = tk.Label(plottings, text="Plot type:")
+    type_plot_label.grid(row = 0, column = 0)
+    type_plot = tk.OptionMenu(plottings, opts_dict["type_plot"], *type_options)
+    type_plot.grid(row = 0, column = 1)
     
     # call the modified function to get the Figure instance
-    plot_button = tk.Button(plot_window, text = 'Plot', command = lambda: plot_on_canvas(canvas, opts_dict))
-    plot_button.pack()
+    plot_button = tk.Button(plottings, text = 'Plot', command = lambda: plot_on_canvas(canvas, opts_dict))
+    plot_button.grid(row = 0, column = 2)
+    
+    # Save results button
+    save_button = tk.Button(plottings, text = 'Save results', command = save_results)
+    save_button.grid(row = 1, column = 1)
+    
+    plottings.pack()
     
     # Plot Canvas
     canvas = tk.Canvas(plot_window, width=900, height=500)
     canvas.pack_propagate(0)
     canvas.pack()
-    
-    # Save results button
-    save_button = tk.Button(plot_window, text = 'Save results', command = save_results)
-    save_button.pack()
-    
-    # Variables
-    
     
     # Place main Frame and run mainloop
     options_window.grid(row = 0, column = 0)
@@ -454,11 +455,8 @@ def calc_model():
                                                 backtrack=False,
                                                 gcr=gcr)
            
-    elif track == 'Normalized':
-        sat_mount = pvsystem.FixedMount(surface_tilt = pannel_tilt,
-                                        surface_azimuth = pannel_azimuth)
         
-    elif track == 'Mannual':
+    elif track == 'Fixed tilt':
         sat_mount = pvsystem.FixedMount(surface_tilt = pannel_tilt,
                                         surface_azimuth = pannel_azimuth)
         
