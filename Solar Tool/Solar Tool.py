@@ -9,11 +9,11 @@ https://re.jrc.ec.europa.eu/pvg_tools/en/#TMY
 
 # Libraries
 
-import warnings, webbrowser, os
+import warnings
 from pvlib import pvsystem, iotools, location, modelchain
 from pvlib.temperature import TEMPERATURE_MODEL_PARAMETERS as PARAMS
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, ttk
 from pvlib.bifacial.pvfactors import pvfactors_timeseries
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -30,6 +30,7 @@ pvrow_height = 3
 pvrow_width = 4
 albedo = 0.2
 bifaciality = 0.75
+flag_inicio = True
 
 type_options = ['Monthly Energy', 'Yield', 'Bifacial Gain', 'Performance Ratio']
 track_options = ['Track', 'Backtrack', 'Fixed tilt']
@@ -47,7 +48,7 @@ my_inverter = cec_inverters[inverter]
 def main():
     
     # Global variables and objects
-    global my_module, opts_dict, my_inverter, location_dict
+    global my_module, opts_dict, my_inverter, location_dict, flag_inicio
        
     # Create main window
     
@@ -92,15 +93,17 @@ def main():
     # Choose options
     mod_inv = tk.Frame(options_window, border = 50)
     
-    module_label = tk.Label(mod_inv, text="Module selector:")
-    module_label.pack()
-    module_selector = tk.OptionMenu(mod_inv, opts_dict["module"], *bifacial_modules)
-    module_selector.pack()
+    module_label = tk.Label(mod_inv, text="Module: ")
+    module_label.grid(row = 0, column = 0)
+    module_selector = ttk.Combobox(mod_inv, textvariable=opts_dict['module'], values=bifacial_modules.T.index.to_list())
+    module_selector.configure(width = 30)
+    module_selector.grid(row = 0, column = 1)
     
-    inverter_label = tk.Label(mod_inv, text="Inverter selector:")
-    inverter_label.pack()
-    inverter_label = tk.OptionMenu(mod_inv, opts_dict["inverter"], *cec_inverters)
-    inverter_label.pack()
+    inverter_label = tk.Label(mod_inv, text="Inverter: ")
+    inverter_label.grid(row = 2, column = 0)
+    inverter_selector = ttk.Combobox(mod_inv, textvariable=opts_dict['inverter'], values=cec_inverters.T.index.to_list())
+    inverter_selector.configure(width = 30)
+    inverter_selector.grid(row = 2, column = 1)
     
     mod_inv.pack()
     
@@ -178,16 +181,16 @@ def main():
     plot_button = tk.Button(plottings, text = 'Plot', command = lambda: plot_on_canvas(canvas, opts_dict))
     plot_button.grid(row = 0, column = 2)
     
-    # Save results button
-    save_button = tk.Button(plottings, text = 'Save results', command = save_results)
-    save_button.grid(row = 1, column = 1)
-    
     plottings.pack()
     
     # Plot Canvas
-    canvas = tk.Canvas(plot_window, width=900, height=500)
+    canvas = tk.Canvas(plot_window, width=800, height=400, bg = 'white')
     canvas.pack_propagate(0)
     canvas.pack()
+    
+    # Save results button
+    save_button = tk.Button(plot_window, text = 'Save results', command = save_results)
+    save_button.pack()
     
     # Place main Frame and run mainloop
     options_window.grid(row = 0, column = 0)
@@ -197,23 +200,6 @@ def main():
 ####################################################################################################
 # Functions
 
-# Load data from .epw file
-def load_data():
-    
-    global data, metadata, site_location, solar_position
-    meteo_file = filedialog.askopenfilename()
-    data, metadata = iotools.read_epw(meteo_file, coerce_year = 2020)
-    site_location = location.Location(latitude = metadata['latitude'],
-                                      longitude = metadata['longitude'])
-
-    solar_position = site_location.get_solarposition(data.index)
-    return data, metadata, site_location, solar_position
-
-# Open TMY data URL    
-def open_url():
-    url = "https://re.jrc.ec.europa.eu/pvg_tools/en/#TMY"
-    webbrowser.open_new(url)
-    
 # Plot energy data by months graph bar
 def plot_monthly():
     
@@ -378,9 +364,10 @@ def plot_on_canvas(frame, opts_dict):
     
     # Remove any previous plot from the frame
     for widget in frame.winfo_children():
-        widget.destroy()
+        widget.destroy()    
     
     # Get the figure from the plot_monthly function
+        
     if (opts_dict['type_plot'].get() == 'Monthly Energy'):
         fig = plot_monthly()
         
@@ -392,7 +379,7 @@ def plot_on_canvas(frame, opts_dict):
         
     elif (opts_dict['type_plot'].get() == 'Performance Ratio'): 
         fig = plot_pr()
-    
+
     # Get the Tkinter widget for the figure
     canvas = FigureCanvasTkAgg(fig, master=frame)
     canvas_widget = canvas.get_tk_widget()
@@ -408,9 +395,16 @@ def calc_model():
     
     global results, total_results
     
+    # Update parameters
     modules_per_string = opts_dict['modules_per_string'].get()
     strings = opts_dict['strings'].get()
     gcr = opts_dict['gcr'].get()
+    my_module = bifacial_modules[opts_dict['module'].get()]
+    my_inverter = cec_inverters[opts_dict['inverter'].get()]
+    track = opts_dict['tracking'].get()
+    pannel_azimuth = opts_dict['pannel_azimuth'].get()
+    pannel_tilt = opts_dict['pannel_tilt'].get()
+    
     
     global data, months_selected, inputs, metadata 
     data, months_selected, inputs, metadata = iotools.get_pvgis_tmy(opts_dict['latitude'].get(), 
@@ -431,12 +425,8 @@ def calc_model():
 
     solar_position = site_location.get_solarposition(data.index)
     
-    # Update parameters
-    my_module = bifacial_modules[opts_dict['module'].get()]
-    my_inverter = cec_inverters[opts_dict['inverter'].get()]
-    track = opts_dict['tracking'].get()
-    pannel_azimuth = opts_dict['pannel_azimuth'].get()
-    pannel_tilt = opts_dict['pannel_tilt'].get()
+
+    
     
     results = pd.DataFrame({})
     total_results = pd.DataFrame({})
@@ -477,8 +467,7 @@ def calc_model():
                                   pvrow_width,
                                   albedo,
                                   n_pvrows=3,
-                                  index_observed_pvrow=1
-                                  )
+                                  index_observed_pvrow=1)
 
     irrad = pd.concat(irrad, axis = 1)
     
