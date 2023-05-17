@@ -28,9 +28,7 @@ axis_azimuth = 180
 max_angle = 60
 pvrow_height = 3
 pvrow_width = 4
-albedo = 0.2
 bifaciality = 0.75
-flag_inicio = True
 
 type_options = ['Monthly Energy', 'Yield', 'Bifacial Gain', 'Performance Ratio']
 track_options = ['Track', 'Backtrack', 'Fixed tilt']
@@ -66,7 +64,8 @@ def main():
                  'strings': tk.IntVar(value = 4),
                  'gcr': tk.DoubleVar(value = 0.27),
                  'pannel_azimuth': tk.DoubleVar(value = 180),
-                 'pannel_tilt': tk.DoubleVar(value = 30)}
+                 'pannel_tilt': tk.DoubleVar(value = 30),
+                 'albedo': tk.DoubleVar(value = 0.2)}
     
     # TopLevel for the columns
     options_window = tk.Frame(root)
@@ -76,30 +75,33 @@ def main():
     # Latitude and longitude settings
     lat_lon = tk.Frame(options_window, border = 50)
     
-    lat_label = tk.Label(lat_lon, text="Set latitude:")
+    lat_label = tk.Label(lat_lon, text="Set latitude: ")
     lat_label.grid(row = 0, column = 0)
     lat_entry = tk.Entry(lat_lon, textvariable=opts_dict['latitude'])
     lat_entry.grid(row = 0, column = 1)
     lat_entry.bind("<FocusOut>", lambda event: opts_dict['latitude'].set(float(lat_entry.get())))
 
-    lon_label = tk.Label(lat_lon, text="Set longitude")
+    lon_label = tk.Label(lat_lon, text="Set longitude: ")
     lon_label.grid(row = 1, column = 0)
     lon_entry = tk.Entry(lat_lon, textvariable=opts_dict['longitude'])
     lon_entry.grid(row = 1, column = 1)
     lon_entry.bind("<FocusOut>", lambda event: opts_dict['longitude'].set(float(lon_entry.get())))
-    
+    solar_resource_button = tk.Button(lat_lon, text = 'Open Solar Resource', 
+                                      command = lambda: calc_solar_resource(lat = lat_entry.get(),
+                                                                     lon = lon_entry.get()))
+    solar_resource_button.grid(row = 2, column = 1)
     lat_lon.pack()
     
     # Choose options
     mod_inv = tk.Frame(options_window, border = 50)
     
-    module_label = tk.Label(mod_inv, text="Module: ")
+    module_label = tk.Button(mod_inv, text="Module", command = lambda: open_params(bifacial_modules[module_selector.get()]))
     module_label.grid(row = 0, column = 0)
     module_selector = ttk.Combobox(mod_inv, textvariable=opts_dict['module'], values=bifacial_modules.T.index.to_list())
     module_selector.configure(width = 30)
     module_selector.grid(row = 0, column = 1)
     
-    inverter_label = tk.Label(mod_inv, text="Inverter: ")
+    inverter_label = tk.Button(mod_inv, text="Inverter", command = lambda: open_params(cec_inverters[inverter_selector.get()]))
     inverter_label.grid(row = 2, column = 0)
     inverter_selector = ttk.Combobox(mod_inv, textvariable=opts_dict['inverter'], values=cec_inverters.T.index.to_list())
     inverter_selector.configure(width = 30)
@@ -109,7 +111,7 @@ def main():
     
     track_opts = tk.Frame(options_window)
     
-    track_label = tk.Label(track_opts, text="Module selector:")
+    track_label = tk.Label(track_opts, text="Tracking: ")
     track_label.grid(row = 0, column = 0)
     track_selector = tk.OptionMenu(track_opts, opts_dict["tracking"], *track_options)
     track_selector.grid(row = 0, column = 1)
@@ -137,13 +139,13 @@ def main():
     # modules per string and strings
     rows_strings = tk.Frame(options_window)
     
-    mods_label = tk.Label(rows_strings, text="Modules per string:")
+    mods_label = tk.Label(rows_strings, text="Modules per string: ")
     mods_label.grid(row = 0, column = 0)
     mods_entry = tk.Entry(rows_strings, textvariable=opts_dict['modules_per_string'])
     mods_entry.grid(row = 0, column = 1)
     mods_entry.bind("<FocusOut>", lambda event: opts_dict['modules_per_string'].set(int(mods_entry.get())))
     
-    strings_label = tk.Label(rows_strings, text="Strings:")
+    strings_label = tk.Label(rows_strings, text="Strings: ")
     strings_label.grid(row = 1, column = 0)
     strings_entry = tk.Entry(rows_strings, textvariable=opts_dict['strings'])
     strings_entry.grid(row = 1, column = 1)
@@ -152,11 +154,18 @@ def main():
     rows_strings.pack()
     
     # Set GCR
-    gcr_label = tk.Label(rows_strings, text="GCR:")
+    gcr_label = tk.Label(rows_strings, text="GCR: ")
     gcr_label.grid(row = 2, column = 0)
     gcr_entry = tk.Entry(rows_strings, textvariable=opts_dict['gcr'])
     gcr_entry.grid(row = 2, column = 1)
     gcr_entry.bind("<FocusOut>", lambda event: opts_dict['gcr'].set(float(gcr_entry.get())))
+    
+    # Albdedo
+    albedo_label = tk.Label(rows_strings, text="Albedo: ")
+    albedo_label.grid(row = 3, column = 0)
+    albedo_entry = tk.Entry(rows_strings, textvariable=opts_dict['albedo'])
+    albedo_entry.grid(row = 3, column = 1)
+    albedo_entry.bind("<FocusOut>", lambda event: opts_dict['albedo'].set(float(albedo_entry.get())))
     
     # Calculate model
     calc_frame = tk.Frame(options_window, border = 50)
@@ -404,7 +413,7 @@ def calc_model():
     track = opts_dict['tracking'].get()
     pannel_azimuth = opts_dict['pannel_azimuth'].get()
     pannel_tilt = opts_dict['pannel_tilt'].get()
-    
+    albedo = opts_dict['albedo'].get()
     
     global data, months_selected, inputs, metadata 
     data, months_selected, inputs, metadata = iotools.get_pvgis_tmy(opts_dict['latitude'].get(), 
@@ -499,7 +508,7 @@ def calc_model():
     
     # Create results dataframe
     results = pd.DataFrame(index = data.index)
-    results['bifacial'] = results_bifacial
+    results['bifacial'] = results_bifacial  
     results['non bifacial'] = results_non_bifacial
     results['effective irradiance'] = irrad['effective_irradiance']
     
@@ -514,13 +523,82 @@ def calc_model():
 
 # Save total results
 def save_results():
+    
+    global df_results
     df_results = pd.DataFrame({})
     df_results = total_results.T
     df_results = df_results.rename(columns = {0: 'Value'})
     df_results['units'] = ('MWh', 'h', '%', 'pu')
     
+    metadata = {}
+    for key, value in opts_dict.items():
+        metadata[key] = value.get()
+        
+    metadata_df = pd.DataFrame.from_dict(metadata, orient='index', columns=['Value'])
+    df_results = pd.concat([df_results, metadata_df])
     file_path = filedialog.asksaveasfilename(defaultextension='.csv')
     df_results.to_csv(file_path, index = True)
     
+# Solar resource graph
+def calc_solar_resource(lat, lon):
+    
+    solar_resource_window = tk.Tk()
+    solar_resource_window.title('Solar Resource')
+    data, months_selected, inputs, metadata = iotools.get_pvgis_tmy(opts_dict['latitude'].get(), 
+                                                                    opts_dict['longitude'].get(),
+                                                                    map_variables=True)
+    
+    # get the latest year in the index
+    latest_year = max(data.index.year)
+    
+    # create a new index with the latest year
+    new_index = data.index.map(lambda x: x.replace(year=latest_year))
+    
+    # set the new index on the dataframe
+    data = data.set_index(new_index)
+    
+    thresholds = list(range(0, 1100, 100))
+
+    # Count the number of hours below each threshold
+    counts = [sum(irradiance > threshold for irradiance in data['ghi']) for threshold in thresholds]
+    
+    # Create the bar graph
+    figure = plt.Figure(figsize=(10, 6))
+    ax = figure.add_subplot(111)
+    ax.bar(range(len(counts)), counts, tick_label=thresholds)
+    ax.set_xlabel('Irradiance Threshold (W/m²)')
+    ax.set_ylabel('Number of Hours')
+    ax.set_title('Irradiance Distribution')
+    
+    # Create the Tkinter canvas and embed the graph
+    canvas = FigureCanvasTkAgg(figure, master=solar_resource_window)
+    canvas.draw()
+    canvas.get_tk_widget().pack()
+    
+    # Start the Tkinter event loop
+    solar_resource_window.mainloop()
+    
+def open_params(my_module):
+    
+    global module_parameters
+    module_parameters = my_module.to_dict()    
+    
+    module_params_window = tk.Tk()
+    module_params_window.title('Parameters')
+    
+    # Create treeview
+    module_params = ttk.Treeview(module_params_window)
+    module_params['columns'] = ('Index', 'Value')
+    module_params['show'] = 'headings'
+    module_params.heading('Index', text='Index')
+    module_params.heading('Value', text='Value')
+    
+    # Insert dictionary items into the Treeview
+    for key, value in module_parameters.items():
+        module_params.insert('', 'end', values=(key, value))
+        
+    module_params.pack()
+    module_params_window.mainloop()
+   
 if __name__ == "__main__":
     main()
