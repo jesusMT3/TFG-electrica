@@ -53,6 +53,11 @@ def main():
     root = tk.Tk()
     root.title('Bifacial Tool')
     
+    # Set full screen height and width
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    root.geometry(f"{screen_width}x{screen_height}")
+    
     # Dictionaries for changing variables
     opts_dict = {"type_plot": tk.StringVar(value = 'Monthly Energy'),
                  "module": tk.StringVar(value = module),
@@ -542,6 +547,8 @@ def save_results():
 # Solar resource graph
 def calc_solar_resource(lat, lon):
     
+    global data, probability, ghi_daily
+    
     solar_resource_window = tk.Tk()
     solar_resource_window.title('Solar Resource')
     data, months_selected, inputs, metadata = iotools.get_pvgis_tmy(opts_dict['latitude'].get(), 
@@ -556,19 +563,24 @@ def calc_solar_resource(lat, lon):
     
     # set the new index on the dataframe
     data = data.set_index(new_index)
+    ghi_daily = data['ghi']
     
-    thresholds = list(range(0, 1100, 100))
+    thresholds = list(range(0, 1200, 50))
+    ghi_daily['bins'] = pd.cut(ghi_daily, thresholds)
+    probability = ghi_daily['bins'].value_counts().sort_index()
 
-    # Count the number of hours below each threshold
-    counts = [sum(irradiance > threshold for irradiance in data['ghi']) for threshold in thresholds]
+    # Convert the Interval objects into string representations
+    bin_labels = [str(bin_) for bin_ in probability.index]
     
     # Create the bar graph
     figure = plt.Figure(figsize=(10, 6))
     ax = figure.add_subplot(111)
-    ax.bar(range(len(counts)), counts, tick_label=thresholds)
+    ax.bar(bin_labels, probability)
     ax.set_xlabel('Irradiance Threshold (W/m²)')
+    ax.tick_params(axis='x', rotation=45)
     ax.set_ylabel('Number of Hours')
     ax.set_title('Irradiance Distribution')
+    plt.tight_layout()
     
     # Create the Tkinter canvas and embed the graph
     canvas = FigureCanvasTkAgg(figure, master=solar_resource_window)
