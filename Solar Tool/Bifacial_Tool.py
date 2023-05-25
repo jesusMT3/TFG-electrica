@@ -490,7 +490,7 @@ def plot_on_canvas(frame, opts_dict):
 
 def calc_model():
     
-    global results, total_results
+    global results, total_results, results_dc
     
     # Update parameters
     modules_per_string = opts_dict['modules_per_string'].get()
@@ -510,7 +510,7 @@ def calc_model():
     
 
     
-    
+    results_dc = pd.DataFrame({})
     results = pd.DataFrame({})
     total_results = pd.DataFrame({})
     
@@ -605,7 +605,9 @@ def calc_model():
     results_dict['bifacial gains'].set(round(float(total_results['Bifacial gains']), 2))
     results_dict['pr'].set(round(float(total_results['PR']), 2))
     
-    return results
+    results_dc = mc_bifi.results.dc
+    
+    return results, results_dc
 
 # Save total results
 def save_results():
