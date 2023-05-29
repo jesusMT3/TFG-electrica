@@ -730,6 +730,10 @@ def update_voltage(label, voltage_entry, my_module, my_inverter):
     minimum_array_operating_voltage = curve_info['v_mp'][0] * int(n_modules)
     maximum_array_operating_voltage = curve_info['v_mp'][1] * int(n_modules)
     maximum_array_absolute_voltage = curve_info['v_oc'][2] * int(n_modules)
+    vmppt_min = inverter['Mppt_low']
+    vmppt_max = inverter['Mppt_high']
+    absolute_max_inverter_voltage = inverter['Vdco']
+    maximum_system_voltage = module['v_mp_ref']
     
     text = f'Min array operating voltage is {minimum_array_operating_voltage:.2f}V.\n Max array operating voltage is {maximum_array_operating_voltage:.2f}V.\n Max array absolute voltage is {maximum_array_absolute_voltage:.2f}V.'
     
