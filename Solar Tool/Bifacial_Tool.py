@@ -10,7 +10,7 @@ https://re.jrc.ec.europa.eu/pvg_tools/en/#TMY
 # Libraries
 
 import warnings
-from pvlib import pvsystem, iotools, location, modelchain
+from pvlib import pvsystem, iotools, location, modelchain, temperature
 from pvlib.temperature import TEMPERATURE_MODEL_PARAMETERS as PARAMS
 import tkinter as tk
 from tkinter import filedialog, ttk
@@ -162,8 +162,6 @@ def main():
     strings_entry.grid(row = 3, column = 1, sticky = 'w')
     strings_entry.bind("<FocusOut>", lambda event: opts_dict['strings'].set(int(strings_entry.get())))
     
-    rows_strings.pack()
-    
     # Set GCR
     gcr_label = tk.Label(rows_strings, text="GCR: ")
     gcr_label.grid(row = 4, column = 0, sticky = 'w')
@@ -202,6 +200,29 @@ def main():
     bifaciality_entry = tk.Entry(rows_strings, textvariable=opts_dict['bifaciality'], width = 10)
     bifaciality_entry.grid(row = 8, column = 1, sticky = 'w')
     bifaciality_entry.bind("<FocusOut>", lambda event: opts_dict['bifaciality'].set(float(bifaciality_entry.get())))
+    
+    rows_strings.pack()
+    
+    #Pop ups
+    pop_ups = tk.Frame(options_window, border = 50)
+    
+    #Voltage criteria
+    voltage_criteria = tk.Label(pop_ups)
+    update_voltage(voltage_criteria, mods_entry,module_selector.get(),inverter_selector.get())
+    mods_entry.bind("<FocusOut>", lambda event: update_voltage(voltage_criteria, mods_entry,
+                                                                 module_selector.get(),
+                                                                 inverter_selector.get()))
+    module_selector.bind("<FocusOut>", lambda event: update_voltage(voltage_criteria, mods_entry,
+                                                                 module_selector.get(),
+                                                                 inverter_selector.get()))
+    inverter_selector.bind("<FocusOut>", lambda event: update_voltage(voltage_criteria, mods_entry,
+                                                                 module_selector.get(),
+                                                                 inverter_selector.get()))
+    
+    
+    voltage_criteria.pack()
+    
+    pop_ups.pack()
     
     # Calculate model
     calc_frame = tk.Frame(options_window, border = 50)
@@ -676,6 +697,43 @@ def open_params(my_module):
     module_params_window.grid_columnconfigure(0, weight=1)
     module_params_window.mainloop()
     
-   
+def update_voltage(label, voltage_entry, my_module, my_inverter):
+    
+    global IL, I0, Rs, Rsh, nNsVth, curve_info, minimum_array_operating_voltage
+    
+    module = bifacial_modules[my_module]
+    inverter = cec_inverters[my_inverter]
+    n_modules = voltage_entry.get()
+    
+    temps = pd.DataFrame({'temps': [60, 20, -10]}) 
+    IL, I0, Rs, Rsh, nNsVth = pvsystem.calcparams_cec(effective_irradiance = 1000, 
+                                                      temp_cell = temps['temps'], 
+                                                      alpha_sc = module['alpha_sc'], 
+                                                      a_ref = module['a_ref'], 
+                                                      I_L_ref = module['I_L_ref'], 
+                                                      I_o_ref = module['I_o_ref'], 
+                                                      R_sh_ref = module['R_sh_ref'], 
+                                                      R_s = module['R_s'],
+                                                      Adjust = 0)
+    
+    # plug the parameters into the SDE and solve for IV curves:
+    curve_info = pvsystem.singlediode(
+        photocurrent=IL,
+        saturation_current=I0,
+        resistance_series=Rs,
+        resistance_shunt=Rsh,
+        nNsVth=nNsVth,
+        ivcurve_pnts=100,
+        method='lambertw'
+    )
+    
+    minimum_array_operating_voltage = curve_info['v_mp'][0] * int(n_modules)
+    maximum_array_operating_voltage = curve_info['v_mp'][1] * int(n_modules)
+    maximum_array_absolute_voltage = curve_info['v_oc'][2] * int(n_modules)
+    
+    text = f'Min array operating voltage is {minimum_array_operating_voltage:.2f}V.\n Max array operating voltage is {maximum_array_operating_voltage:.2f}V.\n Max array absolute voltage is {maximum_array_absolute_voltage:.2f}V.'
+    
+    label.config(text = text)
+
 if __name__ == "__main__":
     main()
