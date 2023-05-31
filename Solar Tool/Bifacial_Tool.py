@@ -10,7 +10,7 @@ https://re.jrc.ec.europa.eu/pvg_tools/en/#TMY
 # Libraries
 
 import warnings
-from pvlib import pvsystem, iotools, location, modelchain, temperature
+from pvlib import pvsystem, iotools, location, modelchain
 from pvlib.temperature import TEMPERATURE_MODEL_PARAMETERS as PARAMS
 import tkinter as tk
 from tkinter import filedialog, ttk
@@ -51,9 +51,9 @@ def main():
     root.title('Bifacial Tool')
     
     # Set full screen height and width
-    screen_width = root.winfo_screenwidth()
-    screen_height = root.winfo_screenheight()
-    root.geometry(f"{screen_width}x{screen_height}")
+    # screen_width = root.winfo_screenwidth()
+    # screen_height = root.winfo_screenheight()
+    # root.geometry(f"{screen_width}x{screen_height}")
     
     # Dictionaries for changing variables
     opts_dict = {"type_plot": tk.StringVar(value = 'Monthly Energy'),
@@ -75,7 +75,8 @@ def main():
     results_dict = {'energy': tk.DoubleVar(value = 0.0),
                     'yield': tk.DoubleVar(value = 0.0),
                     'bifacial gains': tk.DoubleVar(value = 0.0),
-                    'pr': tk.DoubleVar(value = 0.0)}
+                    'pr': tk.DoubleVar(value = 0.0),
+                    'installed power': tk.DoubleVar(value = 0.0)}
     
     # TopLevel for the columns
     options_window = tk.Frame(root)
@@ -203,27 +204,6 @@ def main():
     
     rows_strings.pack()
     
-    #Pop ups
-    pop_ups = tk.Frame(options_window, border = 50)
-    
-    #Voltage criteria
-    voltage_criteria = tk.Label(pop_ups)
-    update_voltage(voltage_criteria, mods_entry,module_selector.get(),inverter_selector.get())
-    mods_entry.bind("<FocusOut>", lambda event: update_voltage(voltage_criteria, mods_entry,
-                                                                 module_selector.get(),
-                                                                 inverter_selector.get()))
-    module_selector.bind("<FocusOut>", lambda event: update_voltage(voltage_criteria, mods_entry,
-                                                                 module_selector.get(),
-                                                                 inverter_selector.get()))
-    inverter_selector.bind("<FocusOut>", lambda event: update_voltage(voltage_criteria, mods_entry,
-                                                                 module_selector.get(),
-                                                                 inverter_selector.get()))
-    
-    
-    voltage_criteria.pack()
-    
-    pop_ups.pack()
-    
     # Calculate model
     calc_frame = tk.Frame(options_window, border = 50)
     
@@ -256,6 +236,28 @@ def main():
     canvas.pack_propagate(0)
     canvas.pack()
     canvas_frame.pack()
+    
+    #Pop ups
+    pop_ups = tk.Frame(plot_window, border = 50)
+    
+    #Voltage criteria
+    voltage_criteria = tk.Label(pop_ups)
+    update_voltage(voltage_criteria, mods_entry,module_selector.get(),inverter_selector.get())
+    mods_entry.bind("<FocusOut>", lambda event: update_voltage(voltage_criteria, mods_entry,
+                                                                 module_selector.get(),
+                                                                 inverter_selector.get()))
+    module_selector.bind("<FocusOut>", lambda event: update_voltage(voltage_criteria, mods_entry,
+                                                                 module_selector.get(),
+                                                                 inverter_selector.get()))
+    inverter_selector.bind("<FocusOut>", lambda event: update_voltage(voltage_criteria, mods_entry,
+                                                                 module_selector.get(),
+                                                                 inverter_selector.get()))
+    
+    
+    voltage_criteria.grid(row = 0, column = 0, sticky = 'w')
+    voltage_criteria.config(wraplength=400)
+    
+    pop_ups.pack()
     
     #Results window
     total = tk.Frame(results_window, border = 50)
@@ -298,6 +300,16 @@ def main():
     
     pr_units_label = tk.Label(total, text = 'pu')
     pr_units_label.grid(row = 3, column = 2, sticky = 'w')
+    
+    #Installed power
+    power_label = tk.Label(total, text = 'Installed Power: ')
+    power_label.grid(row = 4, column = 0, sticky = 'w')
+    
+    power_value_label = tk.Label(total, textvariable = results_dict['installed power'])
+    power_value_label.grid(row = 4, column = 1, sticky = 'w')
+    
+    power_units_label = tk.Label(total, text = 'kWp')
+    power_units_label.grid(row = 4, column = 2, sticky = 'w')
     
     total.pack()
     
@@ -621,10 +633,11 @@ def calc_model():
     total_results['PR'] = pr / (1 + (glob_back / glob_inc))
     
     #Update total results
-    results_dict['energy'].set(round(float(total_results['Energy']), 2))
-    results_dict['yield'].set(round(float(total_results['Yield']), 2))
-    results_dict['bifacial gains'].set(round(float(total_results['Bifacial gains']), 2))
-    results_dict['pr'].set(round(float(total_results['PR']), 2))
+    results_dict['energy'].set(round(float(total_results['Energy'].iloc[0]), 2))
+    results_dict['yield'].set(round(float(total_results['Yield'].iloc[0]), 2))
+    results_dict['bifacial gains'].set(round(float(total_results['Bifacial gains'].iloc[0]), 2))
+    results_dict['pr'].set(round(float(total_results['PR'].iloc[0]), 2))
+    results_dict['installed power'].set(round(float(dc_power/1000), 2))
     
     results_dc = mc_bifi.results.dc
     
@@ -701,10 +714,12 @@ def update_voltage(label, voltage_entry, my_module, my_inverter):
     
     global IL, I0, Rs, Rsh, nNsVth, curve_info, minimum_array_operating_voltage
     
+    # Get values
     module = bifacial_modules[my_module]
     inverter = cec_inverters[my_inverter]
     n_modules = voltage_entry.get()
-    
+
+    # Do calculations for max and min temperature
     temps = pd.DataFrame({'temps': [60, 20, -10]}) 
     IL, I0, Rs, Rsh, nNsVth = pvsystem.calcparams_cec(effective_irradiance = 1000, 
                                                       temp_cell = temps['temps'], 
@@ -733,9 +748,26 @@ def update_voltage(label, voltage_entry, my_module, my_inverter):
     vmppt_min = inverter['Mppt_low']
     vmppt_max = inverter['Mppt_high']
     absolute_max_inverter_voltage = inverter['Vdco']
-    maximum_system_voltage = module['v_mp_ref']
+    maximum_system_voltage = module['V_mp_ref']
     
-    text = f'Min array operating voltage is {minimum_array_operating_voltage:.2f}V.\n Max array operating voltage is {maximum_array_operating_voltage:.2f}V.\n Max array absolute voltage is {maximum_array_absolute_voltage:.2f}V.'
+    #PVsyst condition 1
+    if minimum_array_operating_voltage < vmppt_min:
+        text = f'Voltage warning! Minimum array operating value ({minimum_array_operating_voltage:.2f}V)\n less than minimum inverter operating value ({vmppt_min:.2f}V)'
+    
+    #PVsyst condition 2
+    elif maximum_array_operating_voltage > vmppt_max:
+        text = f'Voltage warning! Maximum array operating value ({maximum_array_operating_voltage:.2f}V)\n greater than maximum inverter operating value ({vmppt_max:.2f}V)'
+    
+    #PVsyst condition 3
+    elif maximum_array_absolute_voltage < vmppt_min:
+        text = f'Voltage warning! Maximum array absolute value ({maximum_array_absolute_voltage:.2f}V)\n less than absolute inverter value ({absolute_max_inverter_voltage:.2f}V)'
+    
+    #PVsyst condition 4
+    elif maximum_array_absolute_voltage < maximum_system_voltage:
+        text = f'Voltage warning! Maximum array operating value ({maximum_array_absolute_voltage:.2f}V)\n greater than maximum system specification value ({maximum_system_voltage:.2f}V)'
+    
+    else:
+        text = 'Voltage criteria is okay.'
     
     label.config(text = text)
 
