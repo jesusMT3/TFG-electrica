@@ -18,6 +18,7 @@ from pvlib.bifacial.pvfactors import pvfactors_timeseries
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import requests
 
 # supressing shapely warnings that occur on import of pvfactors
 warnings.filterwarnings(action='ignore', module='pvfactors')
@@ -64,7 +65,7 @@ def main():
                  'longitude': tk.DoubleVar(value = -3.73),
                  'modules_per_string': tk.IntVar(value = 8),
                  'strings': tk.IntVar(value = 4),
-                 'gcr': tk.DoubleVar(value = 0.27),
+                 'gcr': tk.DoubleVar(value = 1),
                  'pannel_azimuth': tk.DoubleVar(value = 180.0),
                  'pannel_tilt': tk.DoubleVar(value = 30.0),
                  'albedo': tk.DoubleVar(value = 0.2),
@@ -76,7 +77,11 @@ def main():
                     'yield': tk.DoubleVar(value = 0.0),
                     'bifacial gains': tk.DoubleVar(value = 0.0),
                     'pr': tk.DoubleVar(value = 0.0),
-                    'installed power': tk.DoubleVar(value = 0.0)}
+                    'installed power': tk.DoubleVar(value = 0.0),
+                    'Solar resource': tk.DoubleVar(value = 0.0),
+                    'Incident irradiance': tk.DoubleVar(value = 0.0),
+                    'Array energy': tk.DoubleVar(value = 0.0),
+                    'Inverter energy': tk.DoubleVar(value = 0.0)}
     
     # TopLevel for the columns
     options_window = tk.Frame(root)
@@ -99,8 +104,15 @@ def main():
     lon_entry.grid(row = 1, column = 1, sticky = 'w')
     lon_entry.bind("<FocusOut>", lambda event: opts_dict['longitude'].set(float(lon_entry.get())))
     solar_resource_button = tk.Button(lat_lon, text = 'Load Data', 
-                                      command = lambda: calc_solar_resource())
-    solar_resource_button.grid(row = 2, column = 1)
+                                      command = lambda: calc_solar_resource(location_criteria))
+    solar_resource_button.grid(row = 2, column = 0)
+    
+    # Location criteria
+    location_criteria = tk.Label(lat_lon)
+    location_criteria.config(text = 'Not loaded')
+    location_criteria.grid(row = 2, column = 1, sticky = 'w')
+    location_criteria.config(wraplength=200)
+    
     lat_lon.pack()
     
     # Choose options
@@ -240,22 +252,30 @@ def main():
     #Pop ups
     pop_ups = tk.Frame(plot_window, border = 50)
     
+    # Voltage and sizing criteria
+    def update_criteria(event):
+        update_voltage(voltage_criteria, mods_entry.get(),module_selector.get(),inverter_selector.get())
+        update_sizing(inverter_criteria, module_selector.get(), inverter_selector.get(), mods_entry.get(), strings_entry.get())
+    
     #Voltage criteria
     voltage_criteria = tk.Label(pop_ups)
-    update_voltage(voltage_criteria, mods_entry,module_selector.get(),inverter_selector.get())
-    mods_entry.bind("<FocusOut>", lambda event: update_voltage(voltage_criteria, mods_entry,
-                                                                 module_selector.get(),
-                                                                 inverter_selector.get()))
-    module_selector.bind("<FocusOut>", lambda event: update_voltage(voltage_criteria, mods_entry,
-                                                                 module_selector.get(),
-                                                                 inverter_selector.get()))
-    inverter_selector.bind("<FocusOut>", lambda event: update_voltage(voltage_criteria, mods_entry,
-                                                                 module_selector.get(),
-                                                                 inverter_selector.get()))
-    
-    
+    update_voltage(voltage_criteria, mods_entry.get(),module_selector.get(),inverter_selector.get())
+
     voltage_criteria.grid(row = 0, column = 0, sticky = 'w')
     voltage_criteria.config(wraplength=400)
+    
+    # Inverter criteria
+    inverter_criteria = tk.Label(pop_ups)
+    update_sizing(inverter_criteria, module_selector.get(), inverter_selector.get(), mods_entry.get(), strings_entry.get())
+    
+    
+    inverter_criteria.grid(row = 1, column = 0, sticky = 'w')
+    inverter_criteria.config(wraplength=400)
+    
+    mods_entry.bind("<FocusOut>", update_criteria)
+    strings_entry.bind("<FocusOut>", update_criteria)
+    module_selector.bind("<FocusOut>", update_criteria)
+    inverter_selector.bind("<FocusOut>", update_criteria)
     
     pop_ups.pack()
     
@@ -312,6 +332,53 @@ def main():
     power_units_label.grid(row = 4, column = 2, sticky = 'w')
     
     total.pack()
+    
+    # Loss diagram
+    
+    loss_diagram = tk.Frame(results_window, border = 50)
+    
+    # Solar resource
+    solar_resource_label = tk.Label(loss_diagram, text = 'Solar resource: ')
+    solar_resource_label.grid(row = 0, column = 0, sticky = 'w')
+    
+    solar_resource_value_label = tk.Label(loss_diagram, textvariable = results_dict['Solar resource'])
+    solar_resource_value_label.grid(row = 0, column = 1, sticky = 'w')
+    
+    solar_resource_units_label = tk.Label(loss_diagram, text = 'kWh/m2')
+    solar_resource_units_label.grid(row = 0, column = 2, sticky = 'w')
+    
+    # Incident irradiance
+    irradiance_label = tk.Label(loss_diagram, text = 'Incident irradiance: ')
+    irradiance_label.grid(row = 1, column = 0, sticky = 'w')
+    
+    irradiance_value_label = tk.Label(loss_diagram, textvariable = results_dict['Incident irradiance'])
+    irradiance_value_label.grid(row = 1, column = 1, sticky = 'w')
+    
+    irradiance_units_label = tk.Label(loss_diagram, text = 'kWh/m2')
+    irradiance_units_label.grid(row = 1, column = 2, sticky = 'w')
+    
+    # Incident irradiance
+    array_energy_label = tk.Label(loss_diagram, text = 'Array energy: ')
+    array_energy_label.grid(row = 2, column = 0, sticky = 'w')
+    
+    array_energy_value_label = tk.Label(loss_diagram, textvariable = results_dict['Array energy'])
+    array_energy_value_label.grid(row = 2, column = 1, sticky = 'w')
+    
+    array_energy_units_label = tk.Label(loss_diagram, text = 'MWh DC')
+    array_energy_units_label.grid(row = 2, column = 2, sticky = 'w')
+    
+    # Inverter energy
+    inverter_energy_label = tk.Label(loss_diagram, text = 'Inverter energy: ')
+    inverter_energy_label.grid(row = 3, column = 0, sticky = 'w')
+    
+    inverter_energy_value_label = tk.Label(loss_diagram, textvariable = results_dict['Inverter energy'])
+    inverter_energy_value_label.grid(row = 3, column = 1, sticky = 'w')
+    
+    inverter_energy_units_label = tk.Label(loss_diagram, text = 'MWh AC')
+    inverter_energy_units_label.grid(row = 3, column = 2, sticky = 'w')
+    
+    loss_diagram.pack()
+    
     
     # Save results button
     save_button = tk.Button(results_window, text = 'Save results', command = save_results)
@@ -523,7 +590,7 @@ def plot_on_canvas(frame, opts_dict):
 
 def calc_model():
     
-    global results, total_results, results_dc
+    global results, total_results, results_dc, irrad
     
     # Update parameters
     modules_per_string = opts_dict['modules_per_string'].get()
@@ -613,7 +680,7 @@ def calc_model():
     irrad['effective_irradiance'] = irrad['total_abs_front'] + (irrad['total_abs_back'] * bifaciality)
     mc_bifi.run_model_from_effective_irradiance(irrad)
     results_bifacial = pd.DataFrame(mc_bifi.results.ac)
-    
+    results_dc = pd.DataFrame(mc_bifi.results.dc)
     # Create results dataframe
     results = pd.DataFrame(index = data.index)
     results['bifacial'] = results_bifacial  
@@ -631,6 +698,7 @@ def calc_model():
     glob_inc = irrad['effective_irradiance'].sum()
     glob_back = irrad['total_abs_back'].sum()
     total_results['PR'] = pr / (1 + (glob_back / glob_inc))
+    total_results['installed power'] = round(float(dc_power/1000), 2)
     
     #Update total results
     results_dict['energy'].set(round(float(total_results['Energy'].iloc[0]), 2))
@@ -638,9 +706,12 @@ def calc_model():
     results_dict['bifacial gains'].set(round(float(total_results['Bifacial gains'].iloc[0]), 2))
     results_dict['pr'].set(round(float(total_results['PR'].iloc[0]), 2))
     results_dict['installed power'].set(round(float(dc_power/1000), 2))
-    
-    results_dc = mc_bifi.results.dc
-    
+    # Loss diagram
+    results_dict['Solar resource'].set(round(float(data['ghi'].sum() / 1000), 2))
+    results_dict['Incident irradiance'].set(round(float(glob_inc.sum() / 1000), 2))
+    results_dict['Array energy'].set(round(float(results_dc['p_mp'].sum() / 1000000), 2)) 
+    results_dict['Inverter energy'].set(round(float(total_results['Energy'].iloc[0]), 2))
+
     return results, results_dc
 
 # Save total results
@@ -650,7 +721,7 @@ def save_results():
     df_results = pd.DataFrame({})
     df_results = total_results.T
     df_results = df_results.rename(columns = {0: 'Value'})
-    df_results['units'] = ('MWh', 'h', '%', 'pu')
+    df_results['units'] = ('MWh', 'h', '%', 'pu', 'kWp')
     
     metadata = {}
     for key, value in opts_dict.items():
@@ -662,20 +733,26 @@ def save_results():
     df_results.to_csv(file_path, index = True)
     
 # Solar resource graph
-def calc_solar_resource():
+def calc_solar_resource(label):
     global data, months_selected, inputs, metadata
-    data, months_selected, inputs, metadata = iotools.get_pvgis_tmy(opts_dict['latitude'].get(), 
-                                                                    opts_dict['longitude'].get(),
-                                                                    map_variables=True)
-    
-    # get the latest year in the index
-    latest_year = max(data.index.year)
-    
-    # create a new index with the latest year
-    new_index = data.index.map(lambda x: x.replace(year=latest_year))
-    
-    # set the new index on the dataframe
-    data = data.set_index(new_index)
+    try:
+        data, months_selected, inputs, metadata = iotools.get_pvgis_tmy(opts_dict['latitude'].get(), 
+                                                                        opts_dict['longitude'].get(),
+                                                                        map_variables=True)
+        
+        
+        # get the latest year in the index
+        latest_year = max(data.index.year)
+        
+        # create a new index with the latest year
+        new_index = data.index.map(lambda x: x.replace(year=latest_year))
+        
+        # set the new index on the dataframe
+        data = data.set_index(new_index)
+        label.config(text = 'TMY data saved.')
+        
+    except requests.exceptions.HTTPError:
+        label.config(text = 'Invalid location!')
     
     # return data, months_selected, inputs, metadata
     
@@ -710,14 +787,11 @@ def open_params(my_module):
     module_params_window.grid_columnconfigure(0, weight=1)
     module_params_window.mainloop()
     
-def update_voltage(label, voltage_entry, my_module, my_inverter):
-    
-    global IL, I0, Rs, Rsh, nNsVth, curve_info, minimum_array_operating_voltage
+def update_voltage(label, n_modules, my_module, my_inverter):
     
     # Get values
     module = bifacial_modules[my_module]
     inverter = cec_inverters[my_inverter]
-    n_modules = voltage_entry.get()
 
     # Do calculations for max and min temperature
     temps = pd.DataFrame({'temps': [60, 20, -10]}) 
@@ -767,7 +841,37 @@ def update_voltage(label, voltage_entry, my_module, my_inverter):
         text = f'Voltage warning! Maximum array operating value ({maximum_array_absolute_voltage:.2f}V)\n greater than maximum system specification value ({maximum_system_voltage:.2f}V)'
     
     else:
-        text = 'Voltage criteria is okay.'
+        text = 'Voltage between safety parameters.'
+    
+    label.config(text = text)
+    
+def update_sizing(label, my_module, my_inverter, n_rows, n_cols):
+    
+    # Get values
+    module = bifacial_modules[my_module]
+    inverter = cec_inverters[my_inverter]
+    pv_power = module['STC']*int(n_rows)*int(n_cols)
+    inverter_power = inverter['Pdco']
+    pnom_ratio = pv_power / inverter_power
+    
+    # Inverter slightly undersized
+    if pnom_ratio <= 1.15 and pnom_ratio >= 1:
+        text = 'Inverter slightly oversized. '
+    
+    # Inverter strongly undersized
+    elif pnom_ratio < 1:
+        text = 'Warning! Inverter strongly oversized.' 
+        
+    # Inverter slightly oversized
+    elif pnom_ratio >= 1.3 and pnom_ratio <= 1.5:
+        text = 'Inverter slightly undersized.'
+        
+    # Inverter strongly oversized
+    elif pnom_ratio > 1.5:
+        text = 'Warning! Inverter strongly undersized.' 
+    
+    else:
+        text = 'Inverter sizing between safety parameters.'
     
     label.config(text = text)
 

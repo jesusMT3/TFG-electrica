@@ -1,8 +1,9 @@
 ,Value,units
-Energy,25.862564964474945,MWh
-Yield,2310.279721978796,h
-Bifacial gains,5.332469515755696,%
-PR,0.8255425858606998,pu
+Energy,18.851927596797577,MWh
+Yield,1684.0257765198078,h
+Bifacial gains,3.7931354191507256,%
+PR,0.868435596029422,pu
+installed power,11.19,kWp
 type_plot,Monthly Energy,
 module,LONGi_Green_Energy_Technology_Co___Ltd__LR6_72BP_350M,
 inverter,ABB__PVI_10_0_I_OUTD_x_US_480_y_z__480V_,
@@ -11,7 +12,7 @@ latitude,40.45,
 longitude,-3.73,
 modules_per_string,8,
 strings,4,
-gcr,0.27,
+gcr,1.0,
 pannel_azimuth,180.0,
 pannel_tilt,30.0,
 albedo,0.2,
