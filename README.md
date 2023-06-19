@@ -1,4 +1,4 @@
-Aplicación en PVLib python para el cálculo de sistemas fotovoltaicos bifaciales con seguidores a un eje.
+# Aplicación en PVLib python para el cálculo de sistemas fotovoltaicos bifaciales con seguidores a un eje.
 Funcionalidades:
 - Elección de localización.
 - Elección del tipo de módulo e inversor, y acceso a sus parámetros.
@@ -20,7 +20,7 @@ Funcionalidades:
   - Energía a la salida del inversor [MWh].
  
 
-PVLib python based app to calculate bifacial photovoltaic systems with single-axis trackers.
+# PVLib python based app to calculate bifacial photovoltaic systems with single-axis trackers.
 Funcionalities:
 - Change of location.
 - Type of module and inverter and access to their parameters.
