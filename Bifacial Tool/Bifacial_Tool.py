@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sat Apr 15 10:21:14 2023
 
 https://re.jrc.ec.europa.eu/pvg_tools/en/#TMY
 
